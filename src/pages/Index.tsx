@@ -4,7 +4,6 @@ import ProblemSection from "@/components/ProblemSection";
 import OpportunitySection from "@/components/OpportunitySection";
 import SolutionSection from "@/components/SolutionSection";
 import FeaturesSection from "@/components/FeaturesSection";
-import ExecutionSection from "@/components/ExecutionSection";
 import ClosingSection from "@/components/ClosingSection";
 
 const Index = () => {
@@ -16,7 +15,6 @@ const Index = () => {
       <OpportunitySection />
       <SolutionSection />
       <FeaturesSection />
-      <ExecutionSection />
       <ClosingSection />
     </div>
   );
