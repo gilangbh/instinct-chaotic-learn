@@ -18,12 +18,38 @@ const ClosingSection = () => {
 
     setIsSubmitting(true);
     
-    // Simulate submission (replace with actual API call later)
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast.success("You're on the waitlist! We'll be in touch soon.");
-    setEmail("");
-    setIsSubmitting(false);
+    try {
+      // Web3Forms API integration
+      const response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({
+          access_key: "b66642de-8e35-44f4-b699-9f439f2c552d",
+          //access_key: import.meta.env.VITE_WEB3FORMS_ACCESS_KEY,
+          email: email,
+          subject: "New Waitlist Signup - Instinct.fi",
+          from_name: "Instinct.fi Waitlist",
+          message: `New waitlist signup from: ${email}`,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("You're on the waitlist! We'll be in touch soon.");
+        setEmail("");
+      } else {
+        throw new Error(data.message || "Submission failed");
+      }
+    } catch (error) {
+      console.error("Form submission error:", error);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -42,11 +68,13 @@ const ClosingSection = () => {
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto mb-16">
           <Input
             type="email"
+            name="email"
             placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="flex-1 h-12 px-6 text-base border-2 border-primary/20 focus:border-primary"
             disabled={isSubmitting}
+            required
           />
           <Button 
             type="submit"
