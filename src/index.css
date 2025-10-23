@@ -8,43 +8,67 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
+    /* Base colors - Clean, bright whites and soft grays */
     --background: 0 0% 100%;
-    --foreground: 240 10% 10%;
+    --foreground: 222 47% 11%;
 
-    --card: 0 0% 98%;
-    --card-foreground: 240 10% 10%;
+    /* Card colors - Subtle elevation with soft shadows */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
+    /* Popover colors */
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 10%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 189 85% 45%;
+    /* Primary - Professional blue with moderate saturation */
+    --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 280 80% 55%;
+    /* Secondary - Soft indigo for harmony */
+    --secondary: 242 47% 58%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 45%;
+    /* Muted - Subtle grays for depth */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
 
-    --accent: 189 85% 45%;
+    /* Accent - Vibrant but not harsh blue */
+    --accent: 217 91% 60%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
+    /* Destructive - Softer red, not alarming */
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 189 85% 45%;
+    /* Borders and inputs - Clean, minimal */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 221 83% 53%;
 
     --radius: 0.75rem;
 
-    /* Vibrant gradients for light theme */
-    --gradient-neon: linear-gradient(135deg, hsl(189 85% 45%), hsl(280 80% 55%));
-    --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%), hsl(240 5% 98%));
+    /* Success color - Professional green */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning color - Warm amber */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Refined gradients for modern light theme */
+    --gradient-primary: linear-gradient(135deg, hsl(221 83% 53%), hsl(242 47% 58%));
+    --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
+    --gradient-hero: linear-gradient(135deg, hsl(217 91% 60% / 0.1), hsl(242 47% 58% / 0.1));
     
-    /* Subtle shadows for light theme */
-    --glow-cyan: 0 2px 10px hsl(189 85% 45% / 0.15);
-    --glow-purple: 0 2px 10px hsl(280 80% 55% / 0.15);
+    /* Professional shadows with subtle color tints */
+    --shadow-sm: 0 1px 2px hsl(221 83% 53% / 0.05);
+    --shadow-md: 0 4px 6px hsl(221 83% 53% / 0.07), 0 2px 4px hsl(221 83% 53% / 0.05);
+    --shadow-lg: 0 10px 15px hsl(221 83% 53% / 0.1), 0 4px 6px hsl(221 83% 53% / 0.05);
+    --shadow-xl: 0 20px 25px hsl(221 83% 53% / 0.1), 0 10px 10px hsl(221 83% 53% / 0.04);
+    
+    /* Subtle glows for interactive elements */
+    --glow-primary: 0 0 20px hsl(221 83% 53% / 0.3);
+    --glow-secondary: 0 0 20px hsl(242 47% 58% / 0.3);
   }
 }
 
@@ -63,19 +87,74 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
+  /* Text gradients - Professional and smooth */
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-secondary;
   }
 
-  .glow-cyan {
-    color: hsl(189 85% 45%);
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    @apply bg-clip-text text-transparent;
   }
 
-  .glow-purple {
-    color: hsl(280 80% 55%);
+  /* Shadows - Professional elevation system */
+  .shadow-soft-sm {
+    box-shadow: var(--shadow-sm);
   }
 
-  .card-glow {
-    box-shadow: var(--glow-cyan);
+  .shadow-soft-md {
+    box-shadow: var(--shadow-md);
+  }
+
+  .shadow-soft-lg {
+    box-shadow: var(--shadow-lg);
+  }
+
+  .shadow-soft-xl {
+    box-shadow: var(--shadow-xl);
+  }
+
+  /* Card styles - Clean and modern */
+  .card-elevated {
+    @apply bg-card rounded-lg shadow-soft-md transition-shadow duration-200;
+  }
+
+  .card-elevated:hover {
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Interactive glows - Subtle but noticeable */
+  .glow-on-hover {
+    @apply transition-all duration-300;
+  }
+
+  .glow-on-hover:hover {
+    box-shadow: var(--glow-primary);
+  }
+
+  /* Background patterns - Subtle texture */
+  .bg-gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .bg-gradient-subtle {
+    background: var(--gradient-subtle);
+  }
+
+  /* Status colors - Semantic and accessible */
+  .text-success {
+    color: hsl(var(--success));
+  }
+
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+
+  .bg-success {
+    background-color: hsl(var(--success));
+  }
+
+  .bg-warning {
+    background-color: hsl(var(--warning));
   }
 }

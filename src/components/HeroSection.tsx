@@ -1,7 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Gamepad2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const HeroSection = () => {
+  const navigate = useNavigate();
+  
   const scrollToWaitlist = () => {
     const waitlistSection = document.getElementById('waitlist');
     waitlistSection?.scrollIntoView({ behavior: 'smooth' });
@@ -28,13 +31,25 @@ const HeroSection = () => {
           An intentionally chaotic social trading experiment
         </p>
         
-        <Button 
-          onClick={scrollToWaitlist}
-          size="lg"
-          className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-bold text-lg px-12 py-6 h-auto rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
-        >
-          Join the Waitlist
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <Button 
+            onClick={() => navigate('/dashboard')}
+            size="lg"
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 text-white font-bold text-lg px-12 py-6 h-auto rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            <Gamepad2 className="w-5 h-5 mr-2" />
+            Try Demo
+          </Button>
+          
+          <Button 
+            onClick={scrollToWaitlist}
+            size="lg"
+            variant="outline"
+            className="border-2 font-bold text-lg px-12 py-6 h-auto rounded-full shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            Join the Waitlist
+          </Button>
+        </div>
       </div>
     </section>
   );
