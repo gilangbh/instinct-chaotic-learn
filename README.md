@@ -147,6 +147,24 @@ Make changes locally and push to the repository. Pushed changes will also be ref
 
 ## Deployment
 
+### Deploy to Railway (Recommended for Production)
+
+**Quick Start:** See [RAILWAY_QUICKSTART.md](./RAILWAY_QUICKSTART.md) for 5-minute deployment guide.
+
+**Full Guide:** See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for comprehensive documentation.
+
+```bash
+# Test production build locally
+npm run build
+npm run start
+
+# Deploy to Railway
+# 1. Push to GitHub
+# 2. Connect repo in Railway dashboard
+# 3. Set environment variables
+# 4. Deploy automatically
+```
+
 ### Deploy via Lovable
 
 Simply open [Lovable](https://lovable.dev/projects/9ee9a818-5ed7-4f1a-9ee6-5d78efe8b012) and click on **Share → Publish**.
@@ -154,6 +172,7 @@ Simply open [Lovable](https://lovable.dev/projects/9ee9a818-5ed7-4f1a-9ee6-5d78e
 ### Deploy to Other Platforms
 
 This is a standard Vite + React app and can be deployed to:
+- **Railway** - Recommended (see guides above)
 - **Vercel** - `vercel deploy`
 - **Netlify** - `netlify deploy`
 - **GitHub Pages** - Build and push `dist/` folder
@@ -161,6 +180,7 @@ This is a standard Vite + React app and can be deployed to:
 
 **Important:** Make sure to set your environment variables on the deployment platform:
 - `VITE_WEB3FORMS_ACCESS_KEY`
+- See `env.template` for additional environment variables
 
 ## Custom Domain
 
