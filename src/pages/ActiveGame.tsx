@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,8 +11,8 @@ import {
   currentUser,
   formatUSDC,
   formatTime,
-  priceChartData,
 } from '@/lib/mockData';
+import { useMarket } from '@/hooks/useApi';
 import {
   ArrowUp,
   ArrowDown,
@@ -24,6 +24,7 @@ import {
   Zap,
   Target,
   ArrowLeft,
+  Loader2,
 } from 'lucide-react';
 import {
   LineChart,
@@ -33,11 +34,28 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Area,
+  AreaChart,
 } from 'recharts';
 
 export default function ActiveGame() {
   const navigate = useNavigate();
   const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
+
+  // Fetch real market price data
+  const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
+    useMarket.useGetPriceHistory(activeRun.coin);
+
+  // Fetch real current price and 24h change
+  const { data: currentPriceData } = useMarket.useGetCurrentPrice(activeRun.coin);
+
+  // Update last update time when data changes
+  useMemo(() => {
+    if (dataUpdatedAt) {
+      setLastUpdateTime(new Date(dataUpdatedAt));
+    }
+  }, [dataUpdatedAt]);
 
   const userParticipation = activeRun.participants.find(
     (p) => p.user.id === currentUser.id
@@ -61,14 +79,26 @@ export default function ActiveGame() {
     });
   };
 
-  // Format chart data
-  const chartData = priceChartData.slice(-60).map((d) => ({
-    time: d.timestamp.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-    price: d.price,
-  }));
+  // Format chart data - use real data if available
+  const chartData = useMemo(() => {
+    try {
+      if (priceHistoryData?.success && priceHistoryData.data) {
+        const priceData = priceHistoryData.data;
+        // Assuming the API returns an array of price objects with timestamp and price
+        return priceData.slice(-60).map((d: any) => ({
+          time: new Date(d.timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          price: parseFloat(d.price) || 0,
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.error('Error formatting chart data:', error);
+      return [];
+    }
+  }, [priceHistoryData]);
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -174,58 +204,112 @@ export default function ActiveGame() {
             <Card className="card-elevated">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl flex items-center gap-2 text-foreground">
-                    📊 {activeRun.tradingPair}
-                  </CardTitle>
+                  <div className="flex-1">
+                    <CardTitle className="text-xl flex items-center gap-2 text-foreground">
+                      📊 {activeRun.tradingPair}
+                    </CardTitle>
+                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Last updated: {lastUpdateTime.toLocaleTimeString()}
+                    </div>
+                  </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-foreground">
-                      ${currentVotingRound.currentPrice}
+                      ${currentPriceData?.success && currentPriceData.data 
+                        ? currentPriceData.data.price.toFixed(2)
+                        : currentVotingRound.currentPrice}
                     </div>
-                    <div
-                      className={`text-sm ${
-                        currentVotingRound.priceChange24h >= 0
-                          ? 'text-success'
-                          : 'text-destructive'
-                      }`}
-                    >
-                      {currentVotingRound.priceChange24h >= 0 ? '+' : ''}
-                      {currentVotingRound.priceChange24h}% 24h
-                    </div>
+                    {currentPriceData?.success && currentPriceData.data ? (
+                      <div
+                        className={`text-sm ${
+                          (currentPriceData.data.change24h || 0) >= 0
+                            ? 'text-success'
+                            : 'text-destructive'
+                        }`}
+                      >
+                        {(currentPriceData.data.change24h || 0) >= 0 ? '+' : ''}
+                        {(currentPriceData.data.change24h || 0).toFixed(2)}% 24h
+                      </div>
+                    ) : (
+                      <div
+                        className={`text-sm ${
+                          currentVotingRound.priceChange24h >= 0
+                            ? 'text-success'
+                            : 'text-destructive'
+                        }`}
+                      >
+                        {currentVotingRound.priceChange24h >= 0 ? '+' : ''}
+                        {currentVotingRound.priceChange24h}% 24h
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis
-                        dataKey="time"
-                        stroke="hsl(var(--muted-foreground))"
-                        tick={{ fontSize: 12 }}
-                      />
-                      <YAxis
-                        stroke="hsl(var(--muted-foreground))"
-                        tick={{ fontSize: 12 }}
-                        domain={['auto', 'auto']}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                          color: 'hsl(var(--foreground))'
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="price"
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  {isPriceLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                        <p className="text-sm text-muted-foreground">Loading price data...</p>
+                      </div>
+                    </div>
+                  ) : priceError ? (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <p className="text-sm text-destructive mb-2">Failed to load price data</p>
+                        <p className="text-xs text-muted-foreground">Using fallback display</p>
+                      </div>
+                    </div>
+                  ) : chartData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-sm text-muted-foreground">No price data available</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis
+                          dataKey="time"
+                          stroke="hsl(var(--muted-foreground))"
+                          tick={{ fontSize: 12 }}
+                        />
+                        <YAxis
+                          stroke="hsl(var(--muted-foreground))"
+                          tick={{ fontSize: 12 }}
+                          domain={['dataMin - 1', 'dataMax + 1']}
+                          tickFormatter={(value) => `$${value.toFixed(2)}`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--foreground))'
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="price"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={3}
+                          fill="url(#priceGradient)"
+                          activeDot={{ 
+                            r: 4, 
+                            fill: 'hsl(var(--primary))',
+                            stroke: 'hsl(var(--background))',
+                            strokeWidth: 1
+                          }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </CardContent>
             </Card>

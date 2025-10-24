@@ -11,10 +11,17 @@ import {
   formatTime,
   getRunStatusEmoji,
 } from '@/lib/mockData';
-import { ArrowRight, TrendingUp, Users, Clock, Coins } from 'lucide-react';
+import { ArrowRight, TrendingUp, Users, Clock, Coins, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   // Determine which run to show
   const displayRun = activeRun.status === 'active' ? activeRun : waitingRun;
@@ -41,15 +48,32 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-4xl font-bold mb-2 text-foreground">🎮 Instinct.fi</h1>
-            <p className="text-muted-foreground">Gamified community trading on Solana</p>
+            <p className="text-muted-foreground">
+              Gamified community trading on Solana
+              {user && (
+                <span className="ml-2 text-primary font-semibold">
+                  • {user.username}
+                </span>
+              )}
+            </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => navigate('/profile')}
-            className="shadow-soft-sm"
-          >
-            Profile
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => navigate('/profile')}
+              className="shadow-soft-sm"
+            >
+              Profile
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleLogout}
+              className="shadow-soft-sm"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* User Quick Stats */}

@@ -158,3 +158,116 @@ All colors MUST be HSL.
     background-color: hsl(var(--warning));
   }
 }
+
+/* Solana Wallet Adapter Modal Fixes */
+.wallet-adapter-modal-wrapper {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+.wallet-adapter-modal-overlay {
+  z-index: 9998 !important;
+  pointer-events: auto !important;
+}
+
+.wallet-adapter-modal {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+.wallet-adapter-modal-container {
+  pointer-events: auto !important;
+}
+
+.wallet-adapter-modal-button-close {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Wallet button styling */
+.wallet-adapter-button {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Ensure wallet list items are clickable */
+.wallet-adapter-modal-list {
+  pointer-events: auto !important;
+}
+
+.wallet-adapter-modal-list-item {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+.wallet-adapter-modal-list-item:hover {
+  background-color: hsl(var(--muted)) !important;
+}
+
+/* Fix wallet button inside dialog */
+.wallet-adapter-button-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.wallet-adapter-button-trigger {
+  width: 100% !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure modal is always on top */
+[role="dialog"][data-radix-dialog-content] {
+  z-index: 50 !important;
+}
+
+[data-radix-dialog-overlay] {
+  z-index: 40 !important;
+}
+
+/* Wallet adapter should be above dialog */
+.wallet-adapter-modal-wrapper {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 1rem !important;
+}
+
+.wallet-adapter-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+.wallet-adapter-modal {
+  position: relative !important;
+  max-width: 400px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+}
+
+/* Make sure buttons are clickable */
+button {
+  pointer-events: auto !important;
+}
+
+/* Ensure login dialog buttons are clickable */
+[data-radix-dialog-content] button {
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
+/* Fix for wallet connection back button */
+.wallet-connection-back-button {
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+  position: relative !important;
+}

@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { currentUser, runHistory, formatUSDC } from '@/lib/mockData';
+import { runHistory, formatUSDC } from '@/lib/mockData';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   ArrowLeft,
   Trophy,
@@ -12,16 +13,32 @@ import {
   Award,
   Calendar,
   Star,
+  LogOut,
 } from 'lucide-react';
 
 export default function Profile() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  // If no user is logged in, redirect to home
+  if (!user) {
+    navigate('/');
+    return null;
+  }
+
+  // Ensure badges array exists
+  const userBadges = user.badges || [];
 
   // Calculate stats
   const totalProfit = 15400; // Mock total profit across all runs
   const nextLevelXP = 3000;
-  const xpProgress = (currentUser.xp / nextLevelXP) * 100;
-  const userLevel = Math.floor(currentUser.xp / 1000) + 1;
+  const xpProgress = (user.xp / nextLevelXP) * 100;
+  const userLevel = Math.floor(user.xp / 1000) + 1;
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -39,7 +56,15 @@ export default function Profile() {
           <div className="text-center">
             <div className="font-bold text-foreground">Profile</div>
           </div>
-          <div className="w-20"></div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-destructive hover:text-destructive"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
         </div>
       </div>
 
@@ -60,9 +85,9 @@ export default function Profile() {
 
               {/* User Info */}
               <div className="flex-1 text-center md:text-left">
-                <h1 className="text-4xl font-bold mb-2 text-foreground">{currentUser.username}</h1>
+                <h1 className="text-4xl font-bold mb-2 text-foreground">{user.username}</h1>
                 <div className="text-muted-foreground mb-4 font-mono text-sm">
-                  {currentUser.walletAddress}
+                  {user.walletAddress}
                 </div>
 
                 {/* XP Progress */}
@@ -70,12 +95,12 @@ export default function Profile() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-muted-foreground">Level {userLevel}</span>
                     <span className="text-sm text-muted-foreground">
-                      {currentUser.xp} / {nextLevelXP} XP
+                      {user.xp} / {nextLevelXP} XP
                     </span>
                   </div>
                   <Progress value={xpProgress} className="h-3" />
                   <div className="text-xs text-muted-foreground mt-1">
-                    {nextLevelXP - currentUser.xp} XP until level {userLevel + 1}
+                    {nextLevelXP - user.xp} XP until level {userLevel + 1}
                   </div>
                 </div>
               </div>
@@ -90,7 +115,7 @@ export default function Profile() {
                 </div>
                 <div className="bg-muted rounded-lg p-4 text-center">
                   <div className="text-2xl font-bold text-primary">
-                    {currentUser.badges.length}
+                    {userBadges.length}
                   </div>
                   <div className="text-sm text-muted-foreground">Badges</div>
                 </div>
@@ -107,7 +132,7 @@ export default function Profile() {
                 <Trophy className="w-5 h-5 text-warning" />
                 <span className="text-muted-foreground text-sm">Total Runs</span>
               </div>
-              <div className="text-3xl font-bold text-foreground">{currentUser.totalRuns}</div>
+              <div className="text-3xl font-bold text-foreground">{user.totalRuns}</div>
             </CardContent>
           </Card>
 
@@ -118,7 +143,7 @@ export default function Profile() {
                 <span className="text-muted-foreground text-sm">Win Rate</span>
               </div>
               <div className="text-3xl font-bold text-success">
-                {currentUser.winRate}%
+                {user.winRate}%
               </div>
             </CardContent>
           </Card>
@@ -130,7 +155,7 @@ export default function Profile() {
                 <span className="text-muted-foreground text-sm">Total XP</span>
               </div>
               <div className="text-3xl font-bold text-primary">
-                {currentUser.xp}
+                {user.xp}
               </div>
             </CardContent>
           </Card>
@@ -142,7 +167,7 @@ export default function Profile() {
                 <span className="text-muted-foreground text-sm">Badges</span>
               </div>
               <div className="text-3xl font-bold text-secondary">
-                {currentUser.badges.length}
+                {userBadges.length}
               </div>
             </CardContent>
           </Card>
@@ -158,7 +183,7 @@ export default function Profile() {
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-4">
-              {currentUser.badges.map((badge) => (
+              {userBadges.map((badge) => (
                 <div
                   key={badge.id}
                   className="bg-warning/10 border-2 border-warning/50 rounded-lg p-6 shadow-soft-sm"
@@ -180,7 +205,7 @@ export default function Profile() {
               ))}
             </div>
 
-            {currentUser.badges.length === 0 && (
+            {userBadges.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 <div className="text-6xl mb-4">🏆</div>
                 <div className="text-lg text-foreground">No badges yet!</div>
@@ -285,21 +310,21 @@ export default function Profile() {
               <div className="flex items-center justify-between mb-2">
                 <span className="font-medium text-foreground">Earn 5,000 XP</span>
                 <span className="text-sm text-muted-foreground">
-                  {currentUser.xp}/5000
+                  {user.xp}/5000
                 </span>
               </div>
-              <Progress value={(currentUser.xp / 5000) * 100} className="h-2" />
+              <Progress value={(user.xp / 5000) * 100} className="h-2" />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="font-medium text-foreground">Collect 10 Badges</span>
                 <span className="text-sm text-muted-foreground">
-                  {currentUser.badges.length}/10
+                  {userBadges.length}/10
                 </span>
               </div>
               <Progress
-                value={(currentUser.badges.length / 10) * 100}
+                value={(userBadges.length / 10) * 100}
                 className="h-2"
               />
             </div>
