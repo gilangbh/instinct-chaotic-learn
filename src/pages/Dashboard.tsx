@@ -3,20 +3,28 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   activeRun,
   waitingRun,
-  currentUser,
   formatUSDC,
   formatTime,
   getRunStatusEmoji,
 } from '@/lib/mockData';
 import { ArrowRight, TrendingUp, Users, Clock, Coins, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUsers } from '@/hooks/useApi';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  // Fetch user stats from backend
+  const { data: userStatsResponse, isLoading: statsLoading } = useUsers.useGetUserStats(user?.id || '');
+  const { data: userDetailsResponse, isLoading: detailsLoading } = useUsers.useGetUserDetails(user?.id || '');
+
+  const userStats = userStatsResponse?.data;
+  const userDetails = userDetailsResponse?.data;
 
   const handleLogout = () => {
     logout();
@@ -29,7 +37,7 @@ export default function Dashboard() {
   const isWaiting = displayRun.status === 'waiting';
 
   const userParticipation = displayRun.participants.find(
-    (p) => p.user.id === currentUser.id
+    (p) => p.user.id === user?.id
   );
   const isParticipating = !!userParticipation;
 
@@ -80,25 +88,49 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="card-elevated">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.xp}</div>
+              {statsLoading ? (
+                <Skeleton className="h-8 w-20 mb-1" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">
+                  {userStats?.totalXp || user?.xp || 0}
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">Total XP</div>
             </CardContent>
           </Card>
           <Card className="card-elevated">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.totalRuns}</div>
+              {statsLoading ? (
+                <Skeleton className="h-8 w-20 mb-1" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">
+                  {userStats?.totalRuns || user?.totalRuns || 0}
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">Runs Joined</div>
             </CardContent>
           </Card>
           <Card className="card-elevated">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.winRate}%</div>
+              {statsLoading ? (
+                <Skeleton className="h-8 w-20 mb-1" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">
+                  {userStats?.winRate?.toFixed(1) || user?.winRate || 0}%
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">Win Rate</div>
             </CardContent>
           </Card>
           <Card className="card-elevated">
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.badges.length}</div>
+              {detailsLoading ? (
+                <Skeleton className="h-8 w-20 mb-1" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">
+                  {userDetails?.badges?.length || user?.badges?.length || 0}
+                </div>
+              )}
               <div className="text-sm text-muted-foreground">Badges</div>
             </CardContent>
           </Card>
@@ -320,29 +352,44 @@ export default function Dashboard() {
         </div>
 
         {/* Recent Badges */}
-        {currentUser.badges.length > 0 && (
+        {!detailsLoading && userDetails?.badges && userDetails.badges.length > 0 && (
           <Card className="mt-6 card-elevated">
             <CardHeader>
               <CardTitle className="text-xl text-foreground">🏆 Your Recent Badges</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {currentUser.badges.map((badge) => (
-                  <div
-                    key={badge.id}
-                    className="bg-gradient-to-br from-warning/10 to-warning/5 border border-warning/30 rounded-lg p-4 shadow-soft-sm"
-                  >
-                    <div className="text-4xl mb-2">{badge.emoji}</div>
-                    <div className="font-bold text-warning">{badge.name}</div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      {badge.description}
-                    </div>
-                    <div className="text-xs text-muted-foreground/70 mt-2">
-                      {badge.earnedAt.toLocaleDateString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {detailsLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-32 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {userDetails.badges.slice(0, 6).map((badgeItem: any) => {
+                    // Handle both UserBadge structure (from API) and simplified Badge structure (fallback)
+                    const badge = badgeItem.badge || badgeItem;
+                    const badgeId = badgeItem.badgeId || badgeItem.id;
+                    const earnedAt = badgeItem.earnedAt;
+                    
+                    return (
+                      <div
+                        key={badgeId}
+                        className="bg-gradient-to-br from-warning/10 to-warning/5 border border-warning/30 rounded-lg p-4 shadow-soft-sm"
+                      >
+                        <div className="text-4xl mb-2">{badge.emoji}</div>
+                        <div className="font-bold text-warning">{badge.name}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {badge.description}
+                        </div>
+                        <div className="text-xs text-muted-foreground/70 mt-2">
+                          {new Date(earnedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

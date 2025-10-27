@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SolanaWalletProvider } from "@/contexts/WalletProvider";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { PublicOnlyRoute } from "@/components/PublicOnlyRoute";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import ActiveGame from "./pages/ActiveGame";
@@ -33,18 +35,67 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
           <Routes>
-            {/* Landing Page */}
-            <Route path="/" element={<Index />} />
+            {/* Public Only Routes - Redirect to dashboard if logged in */}
+            <Route 
+              path="/" 
+              element={
+                <PublicOnlyRoute>
+                  <Index />
+                </PublicOnlyRoute>
+              } 
+            />
             
-            {/* App Routes */}
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/game" element={<ActiveGame />} />
-            <Route path="/lobby" element={<Lobby />} />
-            <Route path="/results" element={<Results />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/history" element={<History />} />
+            {/* Protected Routes - Require authentication */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/game" 
+              element={
+                <ProtectedRoute>
+                  <ActiveGame />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/lobby" 
+              element={
+                <ProtectedRoute>
+                  <Lobby />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/results" 
+              element={
+                <ProtectedRoute>
+                  <Results />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/history" 
+              element={
+                <ProtectedRoute>
+                  <History />
+                </ProtectedRoute>
+              } 
+            />
             
-            {/* Test Route */}
+            {/* Test Route - Publicly accessible for development */}
             <Route path="/test" element={<ApiTest />} />
             
             {/* Catch-all route */}

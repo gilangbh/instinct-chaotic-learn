@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { Wallet, User as UserIcon, Loader2, RotateCcw, ExternalLink } from 'lucide-react';
+import { Wallet, User as UserIcon, Loader2, RotateCcw, ExternalLink, CheckCircle2 } from 'lucide-react';
 import bs58 from 'bs58';
+import { api } from '@/lib/api';
 
 interface LoginDialogProps {
   open: boolean;
@@ -30,6 +31,8 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const [usernameForWallet, setUsernameForWallet] = useState('');
   const [selectedWallet, setSelectedWallet] = useState<WalletInfo | null>(null);
   const [connectedWallet, setConnectedWallet] = useState<any>(null);
+  const [existingUser, setExistingUser] = useState<any>(null);
+  const [isCheckingWallet, setIsCheckingWallet] = useState(false);
   const [formData, setFormData] = useState({
     walletAddress: '',
     username: '',
@@ -169,6 +172,27 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       });
       setSelectedWallet(wallet);
       
+      // Check if wallet already exists in database
+      setIsCheckingWallet(true);
+      try {
+        const response = await api.users.getByWallet(publicKey);
+        if (response.success && response.data) {
+          // User exists - no need to ask for username again
+          setExistingUser(response.data);
+          console.log('Welcome back user:', response.data);
+        } else {
+          // New wallet - user will need to provide username
+          setExistingUser(null);
+          console.log('New wallet detected, username required');
+        }
+      } catch (err) {
+        // Wallet not found in database - treat as new user
+        console.log('Wallet not found in database, treating as new user');
+        setExistingUser(null);
+      } finally {
+        setIsCheckingWallet(false);
+      }
+      
     } catch (err: any) {
       console.error('Wallet connection error:', err);
       setError(err.message || `Failed to connect to ${wallet.name}. Please make sure ${wallet.name} is installed and unlocked.`);
@@ -181,26 +205,39 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     setConnectedWallet(null);
     setSelectedWallet(null);
     setUsernameForWallet('');
+    setExistingUser(null);
     setError('');
   };
 
   const handleWalletLogin = async () => {
-    if (!connectedWallet || !usernameForWallet) {
-      setError('Please connect wallet and enter username');
+    if (!connectedWallet) {
+      setError('Please connect wallet');
       return;
     }
 
-    if (usernameForWallet.length < 3) {
+    // For new users, require username
+    if (!existingUser && !usernameForWallet) {
+      setError('Please enter a username');
+      return;
+    }
+
+    // Validate username length for new users
+    if (!existingUser && usernameForWallet.length < 3) {
       setError('Username must be at least 3 characters');
       return;
     }
+
+    // Use existing username or new username
+    const username = existingUser ? existingUser.username : usernameForWallet;
 
     setIsLoading(true);
     setError('');
 
     try {
       // Create message to sign
-      const message = `Sign this message to authenticate with Instinct.fi\n\nWallet: ${connectedWallet.publicKey}\nUsername: ${usernameForWallet}\nTimestamp: ${Date.now()}`;
+      const message = `Sign this message to authenticate with Instinct.fi\n\nWallet: ${connectedWallet.publicKey}\nUsername: ${username}\nTimestamp: ${Date.now()}`;
+      
+      console.log(existingUser ? 'Returning user authentication' : 'New user registration');
       
       // Request signature from wallet
       const encodedMessage = new TextEncoder().encode(message);
@@ -241,7 +278,7 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       console.log('Final encoded signature:', signatureBase58);
 
       // Call wallet login function
-      await loginWithWallet(connectedWallet.publicKey, usernameForWallet, message, signatureBase58);
+      await loginWithWallet(connectedWallet.publicKey, username, message, signatureBase58);
       
       // Close dialog on success
       onOpenChange(false);
@@ -424,15 +461,38 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
                   <div className="font-mono text-sm text-success break-all">
                     {connectedWallet.publicKey}
                   </div>
+                  
+                  {/* Checking wallet status */}
+                  {isCheckingWallet && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Checking wallet...
+                    </div>
+                  )}
+                  
+                  {/* Existing user welcome message */}
+                  {!isCheckingWallet && existingUser && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-success">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Welcome back, <span className="font-semibold">{existingUser.username}</span>!
+                    </div>
+                  )}
+                  
+                  {/* New wallet message */}
+                  {!isCheckingWallet && !existingUser && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      New wallet detected - please choose a username
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Username Input */}
-              {connectedWallet && (
+              {/* Username Input - Only show for new users */}
+              {connectedWallet && !isCheckingWallet && !existingUser && (
                 <div className="space-y-2">
                   <Label htmlFor="walletUsername" className="text-foreground flex items-center gap-2">
                     <UserIcon className="w-4 h-4" />
-                    2. Enter Username
+                    2. Choose Username
                   </Label>
                   <Input
                     id="walletUsername"
@@ -442,7 +502,11 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
                     onChange={(e) => setUsernameForWallet(e.target.value)}
                     disabled={isLoading}
                     className="bg-muted border-border focus:border-primary"
+                    autoFocus
                   />
+                  <p className="text-xs text-muted-foreground">
+                    This username will be linked to your wallet address
+                  </p>
                 </div>
               )}
 
@@ -454,10 +518,10 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               )}
 
               {/* Sign In Button */}
-              {connectedWallet && (
+              {connectedWallet && !isCheckingWallet && (
                 <Button
                   onClick={handleWalletLogin}
-                  disabled={isLoading || !usernameForWallet}
+                  disabled={isLoading || (!existingUser && !usernameForWallet)}
                   className="w-full font-bold text-lg py-6 shadow-soft-md hover:shadow-soft-lg transition-all"
                   style={{ background: 'var(--gradient-primary)' }}
                 >
@@ -466,10 +530,15 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Signing Message...
                     </>
+                  ) : existingUser ? (
+                    <>
+                      <CheckCircle2 className="mr-2 h-5 w-5" />
+                      Sign to Continue
+                    </>
                   ) : (
                     <>
                       <Wallet className="mr-2 h-5 w-5" />
-                      Sign & Authenticate
+                      Sign & Create Account
                     </>
                   )}
                 </Button>
