@@ -2,7 +2,7 @@
 # Adds Python for native dependencies (usb package from Ledger wallet adapter)
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake", "pkg-config", "udev"]
+nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake", "pkg-config", "libusb1", "eudev"]
 
 [phases.install]
 cmds = ["npm ci"]
