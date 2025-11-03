@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { runHistory, formatUSDC } from '@/lib/mockData';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUsers } from '@/hooks/useApi';
 import {
   ArrowLeft,
   Trophy,
@@ -34,12 +35,32 @@ export default function Profile() {
 
   // Determine which profile to show
   const isOwnProfile = !userId || userId === user.id;
-  // TODO: Fetch other user's data from API when viewing someone else's profile
-  // For now, just show own profile
-  const profileUser = isOwnProfile ? user : user; // Will be replaced with API call
+  
+  // Fetch other user's data when viewing someone else's profile
+  const { data: otherUserResponse, isLoading: otherUserLoading } = useUsers.useGetUserDetails(userId || '');
+  
+  const profileUser = isOwnProfile ? user : otherUserResponse?.data;
+
+  // Show loading state when viewing other user's profile
+  if (!isOwnProfile && otherUserLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If viewing other user and profile not found
+  if (!isOwnProfile && !profileUser) {
+    navigate('/dashboard');
+    return null;
+  }
 
   // Ensure badges array exists
-  const userBadges = profileUser.badges || [];
+  const userBadges = profileUser?.badges || [];
 
   // Calculate stats
   const totalProfit = 15400; // Mock total profit across all runs

@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { endedRun, currentUser, formatUSDC } from '@/lib/mockData';
+import { formatUSDC } from '@/lib/mockData';
 import {
   Trophy,
   TrendingUp,
@@ -13,10 +13,13 @@ import {
   Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRuns } from '@/hooks/useApi';
 
 export default function Results() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
+  const { user } = useAuth();
 
   // Redirect to dashboard if no runId provided
   if (!runId) {
@@ -24,18 +27,47 @@ export default function Results() {
     return null;
   }
 
-  const userParticipation = endedRun.participants.find(
-    (p) => p.user.id === currentUser.id
+  // Fetch run data from API
+  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId);
+  const { data: tradesResponse } = useRuns.useGetRunTrades(runId);
+
+  // Extract run data
+  const run = runResponse?.data;
+  const trades = tradesResponse?.data || [];
+
+  // Show loading state
+  if (runLoading || !run) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading results...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if run is not ended
+  if (run.status !== 'ENDED') {
+    toast.error('This run has not ended yet');
+    navigate('/dashboard');
+    return null;
+  }
+
+  const userParticipation = run.participants?.find(
+    (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
 
-  const profitLoss = endedRun.totalPool - endedRun.startingPool;
-  const profitLossPercent = ((profitLoss / endedRun.startingPool) * 100).toFixed(1);
+  const profitLoss = run.totalPool - run.startingPool;
+  const profitLossPercent = run.startingPool > 0
+    ? ((profitLoss / run.startingPool) * 100).toFixed(1)
+    : '0.0';
   const isProfit = profitLoss >= 0;
 
   const userProfit = userParticipation
     ? (userParticipation.finalShare || 0) - userParticipation.depositAmount
     : 0;
-  const userProfitPercent = userParticipation
+  const userProfitPercent = userParticipation && userParticipation.depositAmount > 0
     ? ((userProfit / userParticipation.depositAmount) * 100).toFixed(1)
     : '0';
 
@@ -45,6 +77,7 @@ export default function Results() {
         userParticipation?.finalShare || 0
       )} USDC sent to your wallet`,
     });
+    // TODO: Implement actual withdrawal via Solana
   };
 
   const handlePlayAgain = () => {
@@ -60,7 +93,7 @@ export default function Results() {
       id: 'most-correct',
       name: 'Most Correct Votes',
       emoji: '🎯',
-      winner: endedRun.participants.reduce((prev, current) =>
+      winner: run.participants.reduce((prev, current) =>
         prev.votesCorrect > current.votesCorrect ? prev : current
       ).user,
     },
@@ -68,13 +101,13 @@ export default function Results() {
       id: 'perfect-attendance',
       name: 'Perfect Attendance',
       emoji: '🗳️',
-      winner: endedRun.participants.find((p) => p.totalVotes === 12)?.user,
+      winner: run.participants.find((p) => p.totalVotes === 12)?.user,
     },
     {
       id: 'just-vibing',
       name: 'Just Vibing',
       emoji: '🎵',
-      winner: endedRun.participants.find(
+      winner: run.participants.find(
         (p) => p.votesCorrect / p.totalVotes > 0.4 && p.votesCorrect / p.totalVotes < 0.6
       )?.user,
     },
@@ -94,8 +127,8 @@ export default function Results() {
             Back
           </Button>
           <div className="text-center">
-            <div className="text-sm text-muted-foreground">Run #{endedRun.id}</div>
-            <div className="font-bold text-foreground">{endedRun.tradingPair}</div>
+            <div className="text-sm text-muted-foreground">Run #{run.id}</div>
+            <div className="font-bold text-foreground">{run.tradingPair}</div>
           </div>
           <Badge className="bg-muted text-muted-foreground">ENDED</Badge>
         </div>
@@ -133,13 +166,13 @@ export default function Results() {
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Starting Pool</span>
                   <span className="text-xl font-bold text-foreground">
-                    {formatUSDC(endedRun.startingPool)} USDC
+                    {formatUSDC(run.startingPool)} USDC
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Final Pool</span>
                   <span className="text-xl font-bold text-foreground">
-                    {formatUSDC(endedRun.totalPool)} USDC
+                    {formatUSDC(run.totalPool)} USDC
                   </span>
                 </div>
                 <div className="border-t border-border pt-3 flex justify-between items-center">
@@ -291,7 +324,7 @@ export default function Results() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {endedRun.participants
+              {run.participants
                 .sort((a, b) => (b.finalShare || 0) - (a.finalShare || 0))
                 .map((participant, index) => {
                   const profit =

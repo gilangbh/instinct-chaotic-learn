@@ -4,13 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { waitingRun, currentUser, formatUSDC, formatTime } from '@/lib/mockData';
+import { formatUSDC, formatTime } from '@/lib/mockData';
 import { ArrowLeft, Coins, Users, Clock, Dice5, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRuns } from '@/hooks/useApi';
 
 export default function Lobby() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
+  const { user } = useAuth();
   const [depositAmount, setDepositAmount] = useState('50');
   const [selectedCoin, setSelectedCoin] = useState<string>('');
   const [hasJoined, setHasJoined] = useState(false);
@@ -21,25 +24,63 @@ export default function Lobby() {
     return null;
   }
 
-  const isParticipating = waitingRun.participants.some(
-    (p) => p.user.id === currentUser.id
+  // Fetch run data from API
+  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId);
+  const joinRunMutation = useRuns.useJoinRun();
+
+  // Extract run data
+  const run = runResponse?.data;
+
+  // Show loading state
+  if (runLoading || !run) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading lobby...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if run is not waiting
+  if (run.status !== 'WAITING') {
+    toast.error('This lobby is no longer accepting participants');
+    navigate('/dashboard');
+    return null;
+  }
+
+  const isParticipating = run.participants?.some(
+    (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const amount = parseFloat(depositAmount);
-    if (amount < 10) {
-      toast.error('Minimum deposit is 10 USDC');
+    const minDepositUsdc = run.minDeposit / 100; // Convert cents to USDC
+    const maxDepositUsdc = run.maxDeposit / 100;
+
+    if (amount < minDepositUsdc) {
+      toast.error(`Minimum deposit is ${minDepositUsdc} USDC`);
       return;
     }
-    if (amount > 100) {
-      toast.error('Maximum deposit is 100 USDC');
+    if (amount > maxDepositUsdc) {
+      toast.error(`Maximum deposit is ${maxDepositUsdc} USDC`);
       return;
     }
 
-    setHasJoined(true);
-    toast.success('Successfully joined the run!', {
-      description: `Deposited ${amount} USDC`,
-    });
+    try {
+      await joinRunMutation.mutateAsync({
+        id: runId,
+        data: {
+          depositAmount: amount,
+          walletSignature: 'mock_signature', // TODO: Get real wallet signature
+        },
+      });
+      setHasJoined(true);
+      // Success toast shown by mutation hook
+    } catch (error) {
+      // Error toast shown by mutation hook
+    }
   };
 
   const handleCoinSelect = (coin: string) => {
@@ -81,7 +122,7 @@ export default function Lobby() {
             Back
           </Button>
           <div className="text-center">
-            <div className="text-sm text-muted-foreground">Run #{waitingRun.id}</div>
+            <div className="text-sm text-muted-foreground">Run #{run.id}</div>
             <div className="font-bold text-foreground">Waiting Lobby</div>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/50">
@@ -97,7 +138,7 @@ export default function Lobby() {
             <div className="text-6xl mb-4">⏰</div>
             <h2 className="text-3xl font-bold mb-2 text-foreground">Game Starting Soon!</h2>
             <div className="text-5xl font-mono font-bold text-primary my-6">
-              {formatTime(waitingRun.countdown || 0)}
+              {formatTime(run.countdown || 0)}
             </div>
             <p className="text-muted-foreground">
               Join now or watch the action! Game starts when the timer hits zero.
@@ -214,7 +255,7 @@ export default function Lobby() {
                     <div className="text-xl font-bold text-foreground">
                       {(
                         (parseFloat(depositAmount) * 1000) /
-                        (waitingRun.totalPool + parseFloat(depositAmount) * 1000)
+                        (run.totalPool + parseFloat(depositAmount) * 1000)
                       ).toFixed(1)}
                       % of pool
                     </div>
@@ -235,23 +276,23 @@ export default function Lobby() {
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
                   <span className="text-muted-foreground">Total Pool</span>
                   <span className="text-2xl font-bold text-foreground">
-                    {formatUSDC(waitingRun.totalPool)} USDC
+                    {formatUSDC(run.totalPool)} USDC
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
                   <span className="text-muted-foreground">Players</span>
                   <span className="text-xl font-bold text-foreground">
-                    {waitingRun.participantCount} / {waitingRun.maxParticipants}
+                    {run.participantCount} / {run.maxParticipants}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
                   <span className="text-muted-foreground">Duration</span>
-                  <span className="text-xl font-bold text-foreground">{waitingRun.duration} minutes</span>
+                  <span className="text-xl font-bold text-foreground">{run.duration} minutes</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
                   <span className="text-muted-foreground">Vote Interval</span>
                   <span className="text-xl font-bold text-foreground">
-                    Every {waitingRun.votingInterval} min
+                    Every {run.votingInterval} min
                   </span>
                 </div>
               </CardContent>
@@ -316,12 +357,12 @@ export default function Lobby() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-foreground">
                   <Users className="w-5 h-5 text-primary" />
-                  Current Players ({waitingRun.participantCount})
+                  Current Players ({run.participantCount})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {waitingRun.participants.map((participant, index) => (
+                  {run.participants.map((participant, index) => (
                     <div
                       key={participant.user.id}
                       className={`flex items-center justify-between p-3 rounded ${

@@ -6,13 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import {
-  activeRun,
-  currentVotingRound,
-  currentUser,
   formatUSDC,
   formatTime,
 } from '@/lib/mockData';
-import { useMarket } from '@/hooks/useApi';
+import { useMarket, useRuns } from '@/hooks/useApi';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   ArrowUp,
   ArrowDown,
@@ -41,6 +39,7 @@ import {
 export default function ActiveGame() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
+  const { user } = useAuth();
   const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
 
@@ -50,12 +49,42 @@ export default function ActiveGame() {
     return null;
   }
 
+  // Fetch run data from API
+  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId);
+  const { data: votingRoundResponse, isLoading: votingLoading } = useRuns.useGetCurrentVotingRound(runId);
+  const { data: tradesResponse } = useRuns.useGetRunTrades(runId);
+  const castVoteMutation = useRuns.useCastVote();
+
+  // Extract run data
+  const run = runResponse?.data;
+  const currentVotingRound = votingRoundResponse?.data;
+  const trades = tradesResponse?.data || [];
+
+  // Show loading state
+  if (runLoading || votingLoading || !run) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading game data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect if run is not active
+  if (run.status !== 'ACTIVE') {
+    toast.error('This run is not active');
+    navigate('/dashboard');
+    return null;
+  }
+
   // Fetch real market price data
   const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
-    useMarket.useGetPriceHistory(activeRun.coin);
+    useMarket.useGetPriceHistory(run.coin);
 
   // Fetch real current price and 24h change
-  const { data: currentPriceData } = useMarket.useGetCurrentPrice(activeRun.coin);
+  const { data: currentPriceData } = useMarket.useGetCurrentPrice(run.coin);
 
   // Update last update time when data changes
   useMemo(() => {
@@ -64,26 +93,42 @@ export default function ActiveGame() {
     }
   }, [dataUpdatedAt]);
 
-  const userParticipation = activeRun.participants.find(
-    (p) => p.user.id === currentUser.id
+  const userParticipation = run.participants?.find(
+    (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
 
-  const profitLoss = activeRun.totalPool - activeRun.startingPool;
-  const profitLossPercent = ((profitLoss / activeRun.startingPool) * 100).toFixed(1);
+  const profitLoss = run.totalPool - run.startingPool;
+  const profitLossPercent = run.startingPool > 0 
+    ? ((profitLoss / run.startingPool) * 100).toFixed(1)
+    : '0.0';
   const isProfit = profitLoss >= 0;
 
-  const lastTrade = activeRun.trades[activeRun.trades.length - 1];
+  const lastTrade = trades[trades.length - 1];
 
-  const handleVote = (vote: 'long' | 'short' | 'skip') => {
-    setUserVote(vote);
-    const voteLabels = {
-      long: 'BUY 📈',
-      short: 'SELL 📉',
-      skip: 'SKIP ⏭️',
-    };
-    toast.success(`Vote cast: ${voteLabels[vote]}`, {
-      description: 'Your vote has been recorded! Check back in 7 minutes.',
-    });
+  const handleVote = async (vote: 'long' | 'short' | 'skip') => {
+    if (!currentVotingRound) {
+      toast.error('No active voting round');
+      return;
+    }
+
+    try {
+      setUserVote(vote);
+      await castVoteMutation.mutateAsync({
+        id: runId,
+        round: currentVotingRound.round,
+        choice: vote,
+      });
+
+      const voteLabels = {
+        long: 'BUY 📈',
+        short: 'SELL 📉',
+        skip: 'SKIP ⏭️',
+      };
+      // Toast shown by mutation hook
+    } catch (error) {
+      setUserVote(null);
+      // Error toast shown by mutation hook
+    }
   };
 
   // Format chart data - use real data if available
@@ -121,13 +166,13 @@ export default function ActiveGame() {
             Back
           </Button>
           <div className="text-center">
-            <div className="text-sm text-muted-foreground">Run #{activeRun.id}</div>
-            <div className="font-bold text-foreground">{activeRun.tradingPair}</div>
+            <div className="text-sm text-muted-foreground">Run #{run.id}</div>
+            <div className="font-bold text-foreground">{run.tradingPair}</div>
           </div>
           <div className="text-right">
             <div className="text-sm text-muted-foreground">Round</div>
             <div className="font-bold text-foreground">
-              {activeRun.currentRound}/{activeRun.totalRounds}
+              {run.currentRound}/{run.totalRounds}
             </div>
           </div>
         </div>
@@ -140,7 +185,7 @@ export default function ActiveGame() {
             <CardContent className="p-4">
               <div className="text-sm text-muted-foreground mb-1">Total Pool</div>
               <div className="text-2xl font-bold text-foreground">
-                {formatUSDC(activeRun.totalPool)} USDC
+                {formatUSDC(run.totalPool)} USDC
               </div>
               <div
                 className={`text-sm font-medium ${
@@ -163,7 +208,7 @@ export default function ActiveGame() {
               <div className="text-sm text-muted-foreground">
                 {userParticipation
                   ? `${(
-                      (userParticipation.depositAmount / activeRun.startingPool) *
+                      (userParticipation.depositAmount / run.startingPool) *
                       100
                     ).toFixed(1)}% of pool`
                   : 'Spectating'}
@@ -177,9 +222,9 @@ export default function ActiveGame() {
                 <Users className="w-4 h-4" />
                 Players
               </div>
-              <div className="text-2xl font-bold text-foreground">{activeRun.participantCount}</div>
+              <div className="text-2xl font-bold text-foreground">{run.participantCount}</div>
               <div className="text-sm text-muted-foreground">
-                {activeRun.trades.length} trades executed
+                {run.trades.length} trades executed
               </div>
             </CardContent>
           </Card>
@@ -213,7 +258,7 @@ export default function ActiveGame() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <CardTitle className="text-xl flex items-center gap-2 text-foreground">
-                      📊 {activeRun.tradingPair}
+                      📊 {run.tradingPair}
                     </CardTitle>
                     <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
@@ -541,12 +586,12 @@ export default function ActiveGame() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                   <Users className="w-5 h-5" />
-                  Players ({activeRun.participantCount})
+                  Players ({run.participantCount})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {activeRun.participants.map((participant, index) => (
+                  {run.participants.map((participant, index) => (
                     <div
                       key={participant.user.id}
                       className={`flex items-center justify-between p-2 rounded ${
