@@ -1,12 +1,14 @@
+# Nixpacks configuration for Railway deployment
+# Adds Python for native dependencies (usb package from Ledger wallet adapter)
+
 [phases.setup]
-nixPkgs = ['nodejs_20']
+nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake"]
 
 [phases.install]
-cmds = ['npm ci']
+cmds = ["npm ci"]
 
 [phases.build]
-cmds = ['npm run build']
+cmds = ["npm run railway:build"]
 
 [start]
-cmd = 'npm run start'
-
+cmd = "npm run railway:start"
