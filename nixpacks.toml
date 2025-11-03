@@ -5,7 +5,12 @@
 nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake", "pkg-config", "libusb1", "eudev"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = [
+  "export PKG_CONFIG_PATH=/root/.nix-profile/lib/pkgconfig:$PKG_CONFIG_PATH",
+  "export C_INCLUDE_PATH=/root/.nix-profile/include:$C_INCLUDE_PATH",
+  "export CPLUS_INCLUDE_PATH=/root/.nix-profile/include:$CPLUS_INCLUDE_PATH",
+  "npm ci --legacy-peer-deps || npm ci --legacy-peer-deps --ignore-scripts"
+]
 
 [phases.build]
 cmds = ["npm run railway:build"]
