@@ -107,27 +107,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Login error:', error);
       
-      // Fallback to mock data if API fails
-      console.log('API failed, using mock data for demo...');
-      const mockUser: User = {
-        id: `user_${Date.now()}`,
-        walletAddress,
-        username,
-        xp: 0,
-        totalRuns: 0,
-        winRate: 0,
-        badges: [],
-      };
+      // DO NOT fallback to mock data in production
+      // User should see the error and cannot proceed
+      alert(`Login failed: ${error.message || 'Unable to connect to backend'}`);
       
-      setUser(mockUser);
-      localStorage.setItem('instinct_fi_wallet', walletAddress);
-      localStorage.setItem('instinct_fi_username', username);
+      // Clear any stored data
+      localStorage.removeItem('instinct_fi_wallet');
+      localStorage.removeItem('instinct_fi_username');
+      apiClient.clearToken();
       
-      // Initialize WebSocket connection
-      initializeWebSocket(mockUser.id);
-      
-      const mockToken = `mock_token_${Date.now()}`;
-      apiClient.setToken(mockToken);
+      throw error; // Propagate error so UI can handle it
     } finally {
       setIsLoading(false);
     }
@@ -146,11 +135,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (response.success && response.data) {
-        // Ensure badges array exists
+        // Extract user and token from response
         const userData = {
-          ...response.data,
-          badges: response.data.badges || [],
+          ...(response.data.user || response.data),
+          badges: (response.data.user?.badges || response.data.badges) || [],
         };
+        
+        // Get the actual JWT token from backend
+        const token = (response.data as any).token || (response as any).token;
+        
+        if (token) {
+          apiClient.setToken(token);
+          localStorage.setItem('instinct_fi_token', token);
+        } else {
+          console.warn('No token received from backend, using mock token');
+          const mockToken = `wallet_token_${Date.now()}`;
+          apiClient.setToken(mockToken);
+          localStorage.setItem('instinct_fi_token', mockToken);
+        }
         
         setUser(userData);
         localStorage.setItem('instinct_fi_wallet', walletAddress);
@@ -158,37 +160,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Initialize WebSocket connection
         initializeWebSocket(userData.id);
-        
-        // Set auth token
-        const token = `wallet_token_${Date.now()}`;
-        apiClient.setToken(token);
       } else {
         throw new Error(response.error || 'Wallet authentication failed');
       }
     } catch (error: any) {
       console.error('Wallet login error:', error);
       
-      // Fallback to mock data if API fails
-      console.log('API failed, using mock data for wallet login...');
-      const mockUser: User = {
-        id: `user_wallet_${Date.now()}`,
-        walletAddress,
-        username,
-        xp: 0,
-        totalRuns: 0,
-        winRate: 0,
-        badges: [],
-      };
+      // DO NOT fallback to mock data - wallet authentication MUST succeed
+      alert(`Wallet authentication failed: ${error.message || 'Unable to verify wallet signature with backend'}`);
       
-      setUser(mockUser);
-      localStorage.setItem('instinct_fi_wallet', walletAddress);
-      localStorage.setItem('instinct_fi_username', username);
+      // Clear any stored data
+      localStorage.removeItem('instinct_fi_wallet');
+      localStorage.removeItem('instinct_fi_username');
+      localStorage.removeItem('instinct_fi_token');
+      apiClient.clearToken();
       
-      // Initialize WebSocket connection
-      initializeWebSocket(mockUser.id);
-      
-      const mockToken = `wallet_token_${Date.now()}`;
-      apiClient.setToken(mockToken);
+      throw error; // Propagate error so user stays on login page
     } finally {
       setIsLoading(false);
     }
