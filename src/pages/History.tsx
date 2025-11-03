@@ -85,7 +85,7 @@ export default function History() {
               <Card
                 key={run.id}
                 className="card-elevated hover:shadow-soft-lg transition-all cursor-pointer"
-                onClick={() => navigate('/results')}
+                onClick={() => navigate(`/results/${run.id}`)}
               >
                 <CardHeader>
                   <div className="flex items-center justify-between">

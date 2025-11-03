@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ import {
 
 export default function Profile() {
   const navigate = useNavigate();
+  const { userId } = useParams<{ userId?: string }>();
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
@@ -31,14 +32,20 @@ export default function Profile() {
     return null;
   }
 
+  // Determine which profile to show
+  const isOwnProfile = !userId || userId === user.id;
+  // TODO: Fetch other user's data from API when viewing someone else's profile
+  // For now, just show own profile
+  const profileUser = isOwnProfile ? user : user; // Will be replaced with API call
+
   // Ensure badges array exists
-  const userBadges = user.badges || [];
+  const userBadges = profileUser.badges || [];
 
   // Calculate stats
   const totalProfit = 15400; // Mock total profit across all runs
   const nextLevelXP = 3000;
-  const xpProgress = (user.xp / nextLevelXP) * 100;
-  const userLevel = Math.floor(user.xp / 1000) + 1;
+  const xpProgress = (profileUser.xp / nextLevelXP) * 100;
+  const userLevel = Math.floor(profileUser.xp / 1000) + 1;
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -85,9 +92,9 @@ export default function Profile() {
 
               {/* User Info */}
               <div className="flex-1 text-center md:text-left">
-                <h1 className="text-4xl font-bold mb-2 text-foreground">{user.username}</h1>
+                <h1 className="text-4xl font-bold mb-2 text-foreground">{profileUser.username}</h1>
                 <div className="text-muted-foreground mb-4 font-mono text-sm">
-                  {user.walletAddress}
+                  {profileUser.walletAddress}
                 </div>
 
                 {/* XP Progress */}
@@ -95,12 +102,12 @@ export default function Profile() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-muted-foreground">Level {userLevel}</span>
                     <span className="text-sm text-muted-foreground">
-                      {user.xp} / {nextLevelXP} XP
+                      {profileUser.xp} / {nextLevelXP} XP
                     </span>
                   </div>
                   <Progress value={xpProgress} className="h-3" />
                   <div className="text-xs text-muted-foreground mt-1">
-                    {nextLevelXP - user.xp} XP until level {userLevel + 1}
+                    {nextLevelXP - profileUser.xp} XP until level {userLevel + 1}
                   </div>
                 </div>
               </div>
@@ -132,7 +139,7 @@ export default function Profile() {
                 <Trophy className="w-5 h-5 text-warning" />
                 <span className="text-muted-foreground text-sm">Total Runs</span>
               </div>
-              <div className="text-3xl font-bold text-foreground">{user.totalRuns}</div>
+              <div className="text-3xl font-bold text-foreground">{profileUser.totalRuns}</div>
             </CardContent>
           </Card>
 
@@ -143,7 +150,7 @@ export default function Profile() {
                 <span className="text-muted-foreground text-sm">Win Rate</span>
               </div>
               <div className="text-3xl font-bold text-success">
-                {user.winRate}%
+                {profileUser.winRate}%
               </div>
             </CardContent>
           </Card>
@@ -155,7 +162,7 @@ export default function Profile() {
                 <span className="text-muted-foreground text-sm">Total XP</span>
               </div>
               <div className="text-3xl font-bold text-primary">
-                {user.xp}
+                {profileUser.xp}
               </div>
             </CardContent>
           </Card>
@@ -310,10 +317,10 @@ export default function Profile() {
               <div className="flex items-center justify-between mb-2">
                 <span className="font-medium text-foreground">Earn 5,000 XP</span>
                 <span className="text-sm text-muted-foreground">
-                  {user.xp}/5000
+                  {profileUser.xp}/5000
                 </span>
               </div>
-              <Progress value={(user.xp / 5000) * 100} className="h-2" />
+              <Progress value={(profileUser.xp / 5000) * 100} className="h-2" />
             </div>
 
             <div>

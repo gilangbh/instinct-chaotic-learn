@@ -11,9 +11,12 @@ import {
   formatTime,
   getRunStatusEmoji,
 } from '@/lib/mockData';
-import { ArrowRight, TrendingUp, Users, Clock, Coins, LogOut } from 'lucide-react';
+import { ArrowRight, TrendingUp, Users, Clock, Coins, LogOut, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useUsers } from '@/hooks/useApi';
+import { useUsers, useRuns } from '@/hooks/useApi';
+import { DepositDialog } from '@/components/DepositDialog';
+import { useCountdown } from '@/hooks/useCountdown';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -22,22 +25,58 @@ export default function Dashboard() {
   // Fetch user stats from backend
   const { data: userStatsResponse, isLoading: statsLoading } = useUsers.useGetUserStats(user?.id || '');
   const { data: userDetailsResponse, isLoading: detailsLoading } = useUsers.useGetUserDetails(user?.id || '');
+  
+  // Fetch active runs from backend
+  const { data: activeRunsResponse, isLoading: runsLoading } = useRuns.useGetActiveRuns();
 
   const userStats = userStatsResponse?.data;
   const userDetails = userDetailsResponse?.data;
+  const backendRuns = activeRunsResponse?.data || [];
 
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
-  // Determine which run to show
-  const displayRun = activeRun.status === 'active' ? activeRun : waitingRun;
+  // Determine which run to show - prioritize backend data, fallback to mock
+  const backendActiveRun = backendRuns.find((r: any) => r.status === 'ACTIVE');
+  const backendWaitingRun = backendRuns.find((r: any) => r.status === 'WAITING');
+  
+  // Use backend run if available, otherwise fallback to mock data
+  const hasBackendRuns = !runsLoading && backendRuns.length > 0;
+  let displayRun;
+  
+  if (backendActiveRun) {
+    displayRun = {
+      ...backendActiveRun,
+      status: backendActiveRun.status.toLowerCase(),
+      participants: backendActiveRun.participants || [],
+      participantCount: backendActiveRun.participants?.length || 0,
+      minDeposit: backendActiveRun.minDeposit || 10000,
+      maxDeposit: backendActiveRun.maxDeposit || 100000,
+    };
+  } else if (backendWaitingRun) {
+    displayRun = {
+      ...backendWaitingRun,
+      status: backendWaitingRun.status.toLowerCase(),
+      participants: backendWaitingRun.participants || [],
+      participantCount: backendWaitingRun.participants?.length || 0,
+      minDeposit: backendWaitingRun.minDeposit || 10000,
+      maxDeposit: backendWaitingRun.maxDeposit || 100000,
+    };
+  } else {
+    // Fallback to mock data
+    displayRun = activeRun.status === 'active' ? activeRun : waitingRun;
+  }
+  
   const isActive = displayRun.status === 'active';
   const isWaiting = displayRun.status === 'waiting';
 
-  const userParticipation = displayRun.participants.find(
-    (p) => p.user.id === user?.id
+  // Use smooth client-side countdown
+  const smoothCountdown = useCountdown(displayRun.countdown, displayRun.countdown);
+
+  const userParticipation = displayRun.participants?.find(
+    (p: any) => p.user?.id === user?.id || p.userId === user?.id
   );
   const isParticipating = !!userParticipation;
 
@@ -66,6 +105,11 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <DepositDialog 
+              runId={displayRun.id.toString()}
+              minDeposit={displayRun.minDeposit / 1000} 
+              maxDeposit={displayRun.maxDeposit / 1000}
+            />
             <Button
               variant="outline"
               onClick={() => navigate('/profile')}
@@ -141,6 +185,7 @@ export default function Dashboard() {
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-2 gap-6">
           {/* Active/Waiting Run Card */}
+          {hasBackendRuns ? (
           <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -221,12 +266,22 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    {isActive ? 'Next Vote Closes' : 'Game Starts'}
+                    {isActive ? 'Next Vote Closes' : 'Lobby Ends In'}
                   </span>
                   <span className="text-xl font-mono font-bold text-primary">
-                    {formatTime(displayRun.countdown || 0)}
+                    {formatTime(smoothCountdown)}
                   </span>
                 </div>
+                {isWaiting && smoothCountdown > 0 && (
+                  <div className="mt-2 text-xs text-muted-foreground text-center">
+                    Run starts automatically in {Math.floor(smoothCountdown / 60)} min {smoothCountdown % 60} sec
+                  </div>
+                )}
+                {isWaiting && (displayRun.participants?.length || 0) === 0 && (
+                  <div className="mt-2 text-xs text-warning text-center">
+                    ⚠️ Run will be canceled if no one joins
+                  </div>
+                )}
               </div>
 
               {/* Your Participation */}
@@ -253,7 +308,7 @@ export default function Dashboard() {
                 className="w-full font-bold text-lg py-6 shadow-soft-md hover:shadow-soft-lg transition-all"
                 style={{ background: 'var(--gradient-primary)' }}
                 onClick={() =>
-                  navigate(isActive ? '/game' : isWaiting ? '/lobby' : '/game')
+                  navigate(isActive ? `/game/${displayRun.id}` : isWaiting ? `/lobby/${displayRun.id}` : `/game/${displayRun.id}`)
                 }
               >
                 {isParticipating
@@ -267,6 +322,35 @@ export default function Dashboard() {
               </Button>
             </CardContent>
           </Card>
+          ) : (
+          <Card className="bg-muted/50 border-dashed border-2 shadow-soft-lg">
+            <CardContent className="p-12 text-center">
+              <div className="text-6xl mb-4">🎮</div>
+              <h3 className="text-xl font-bold text-foreground mb-2">No Currently Active Runs</h3>
+              <p className="text-muted-foreground mb-6">
+                There are no trading runs available right now.<br />
+                New runs are created regularly - check back soon!
+              </p>
+              <div className="flex flex-col gap-3 max-w-sm mx-auto">
+                <div className="text-sm text-muted-foreground">
+                  When a run is available, you can:
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Coins className="w-4 h-4 text-primary" />
+                  <span>Deposit 10-100 USDC to join</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Users className="w-4 h-4 text-primary" />
+                  <span>Vote with the community</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  <span>Share profits & earn XP</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          )}
 
           {/* How It Works */}
           <Card className="card-elevated">

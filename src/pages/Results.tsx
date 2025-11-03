@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,13 @@ import { toast } from 'sonner';
 
 export default function Results() {
   const navigate = useNavigate();
+  const { runId } = useParams<{ runId: string }>();
+
+  // Redirect to dashboard if no runId provided
+  if (!runId) {
+    navigate('/dashboard');
+    return null;
+  }
 
   const userParticipation = endedRun.participants.find(
     (p) => p.user.id === currentUser.id

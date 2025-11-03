@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,16 @@ import { toast } from 'sonner';
 
 export default function Lobby() {
   const navigate = useNavigate();
+  const { runId } = useParams<{ runId: string }>();
   const [depositAmount, setDepositAmount] = useState('50');
   const [selectedCoin, setSelectedCoin] = useState<string>('');
   const [hasJoined, setHasJoined] = useState(false);
+
+  // Redirect to dashboard if no runId provided
+  if (!runId) {
+    navigate('/dashboard');
+    return null;
+  }
 
   const isParticipating = waitingRun.participants.some(
     (p) => p.user.id === currentUser.id

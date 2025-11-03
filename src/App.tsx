@@ -15,7 +15,6 @@ import Results from "./pages/Results";
 import Profile from "./pages/Profile";
 import History from "./pages/History";
 import NotFound from "./pages/NotFound";
-import ApiTest from "./components/ApiTest";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,7 +54,7 @@ const App = () => (
               } 
             />
             <Route 
-              path="/game" 
+              path="/game/:runId" 
               element={
                 <ProtectedRoute>
                   <ActiveGame />
@@ -63,7 +62,7 @@ const App = () => (
               } 
             />
             <Route 
-              path="/lobby" 
+              path="/lobby/:runId" 
               element={
                 <ProtectedRoute>
                   <Lobby />
@@ -71,7 +70,7 @@ const App = () => (
               } 
             />
             <Route 
-              path="/results" 
+              path="/results/:runId" 
               element={
                 <ProtectedRoute>
                   <Results />
@@ -87,6 +86,14 @@ const App = () => (
               } 
             />
             <Route 
+              path="/profile/:userId" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/history" 
               element={
                 <ProtectedRoute>
@@ -94,9 +101,6 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
-            
-            {/* Test Route - Publicly accessible for development */}
-            <Route path="/test" element={<ApiTest />} />
             
             {/* Catch-all route */}
             <Route path="*" element={<NotFound />} />
