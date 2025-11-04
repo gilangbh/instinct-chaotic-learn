@@ -30,15 +30,46 @@ export default function Lobby() {
   const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
   const [solBalance, setSolBalance] = useState<number | null>(null);
 
+  // Fetch run data from API (MUST be before early returns)
+  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '');
+  const joinRunMutation = useRuns.useJoinRun();
+
+  // Memoize fetchBalances to prevent infinite re-renders (MUST be before early returns)
+  const fetchBalances = useCallback(async () => {
+    if (!publicKey || !connected) return;
+
+    try {
+      // Get SOL balance
+      const solBal = await connection.getBalance(publicKey);
+      setSolBalance(solBal / LAMPORTS_PER_SOL);
+
+      // Get USDC balance
+      try {
+        const usdcMint = new PublicKey(solanaConfig.usdcMint);
+        const ata = await getAssociatedTokenAddress(usdcMint, publicKey);
+        const tokenAccount = await connection.getTokenAccountBalance(ata);
+        setUsdcBalance(parseFloat(tokenAccount.value.amount) / 1_000_000);
+      } catch (err) {
+        setUsdcBalance(0);
+      }
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+    }
+  }, [publicKey, connected, connection]);
+
+  // Fetch wallet balances when connected (MUST be before early returns)
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchBalances();
+    }
+  }, [connected, publicKey, fetchBalances]);
+
+  // NOW we can do conditional logic and early returns
   // Redirect to dashboard if no runId provided
   if (!runId) {
     navigate('/dashboard');
     return null;
   }
-
-  // Fetch run data from API
-  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId);
-  const joinRunMutation = useRuns.useJoinRun();
 
   // Extract run data
   const run = runResponse?.data;
@@ -65,36 +96,6 @@ export default function Lobby() {
   const isParticipating = run.participants?.some(
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
-
-  // Memoize fetchBalances to prevent infinite re-renders
-  const fetchBalances = useCallback(async () => {
-    if (!publicKey || !connected) return;
-
-    try {
-      // Get SOL balance
-      const solBal = await connection.getBalance(publicKey);
-      setSolBalance(solBal / LAMPORTS_PER_SOL);
-
-      // Get USDC balance
-      try {
-        const usdcMint = new PublicKey(solanaConfig.usdcMint);
-        const ata = await getAssociatedTokenAddress(usdcMint, publicKey);
-        const tokenAccount = await connection.getTokenAccountBalance(ata);
-        setUsdcBalance(parseFloat(tokenAccount.value.amount) / 1_000_000);
-      } catch (err) {
-        setUsdcBalance(0);
-      }
-    } catch (error) {
-      console.error('Error fetching balances:', error);
-    }
-  }, [publicKey, connected, connection]);
-
-  // Fetch wallet balances when connected
-  useEffect(() => {
-    if (connected && publicKey) {
-      fetchBalances();
-    }
-  }, [connected, publicKey, fetchBalances]);
 
   const handleJoin = async () => {
     if (!connected || !publicKey) {
