@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Wallet, User as UserIcon, Loader2, RotateCcw, ExternalLink, CheckCircle2 } from 'lucide-react';
 import bs58 from 'bs58';
 import { api } from '@/lib/api';
+import { generateUsername } from '@/lib/usernameGenerator';
 
 interface LoginDialogProps {
   open: boolean;
@@ -215,20 +216,10 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       return;
     }
 
-    // For new users, require username
-    if (!existingUser && !usernameForWallet) {
-      setError('Please enter a username');
-      return;
-    }
-
-    // Validate username length for new users
-    if (!existingUser && usernameForWallet.length < 3) {
-      setError('Username must be at least 3 characters');
-      return;
-    }
-
-    // Use existing username or new username
-    const username = existingUser ? existingUser.username : usernameForWallet;
+    // Use existing username or auto-generate for new users
+    const username = existingUser 
+      ? existingUser.username 
+      : generateUsername(connectedWallet.publicKey);
 
     setIsLoading(true);
     setError('');
@@ -487,25 +478,18 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
                 </div>
               )}
 
-              {/* Username Input - Only show for new users */}
+              {/* Username Info - Show auto-generated username for new users */}
               {connectedWallet && !isCheckingWallet && !existingUser && (
-                <div className="space-y-2">
-                  <Label htmlFor="walletUsername" className="text-foreground flex items-center gap-2">
-                    <UserIcon className="w-4 h-4" />
-                    2. Choose Username
-                  </Label>
-                  <Input
-                    id="walletUsername"
-                    type="text"
-                    placeholder="Enter your username"
-                    value={usernameForWallet}
-                    onChange={(e) => setUsernameForWallet(e.target.value)}
-                    disabled={isLoading}
-                    className="bg-muted border-border focus:border-primary"
-                    autoFocus
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    This username will be linked to your wallet address
+                <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UserIcon className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold text-primary">Your Username</span>
+                  </div>
+                  <div className="font-mono text-lg font-bold text-foreground">
+                    {generateUsername(connectedWallet.publicKey)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Your unique username has been automatically generated from your wallet address
                   </p>
                 </div>
               )}
@@ -521,7 +505,7 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               {connectedWallet && !isCheckingWallet && (
                 <Button
                   onClick={handleWalletLogin}
-                  disabled={isLoading || (!existingUser && !usernameForWallet)}
+                  disabled={isLoading}
                   className="w-full font-bold text-lg py-6 shadow-soft-md hover:shadow-soft-lg transition-all"
                   style={{ background: 'var(--gradient-primary)' }}
                 >
