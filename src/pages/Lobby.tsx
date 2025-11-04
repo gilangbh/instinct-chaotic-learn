@@ -1,22 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { PublicKey, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createTransferInstruction } from '@solana/spl-token';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatUSDC, formatTime } from '@/lib/mockData';
-import { ArrowLeft, Coins, Users, Clock, Dice5, Plus } from 'lucide-react';
+import { ArrowLeft, Coins, Users, Clock, Dice5, Plus, Wallet, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRuns } from '@/hooks/useApi';
+import solanaConfig from '@/lib/solana-config';
 
 export default function Lobby() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
   const { user } = useAuth();
+  const { publicKey, sendTransaction, connected } = useWallet();
+  const { connection } = useConnection();
+  
   const [depositAmount, setDepositAmount] = useState('50');
   const [selectedCoin, setSelectedCoin] = useState<string>('');
   const [hasJoined, setHasJoined] = useState(false);
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
+  const [solBalance, setSolBalance] = useState<number | null>(null);
 
   // Redirect to dashboard if no runId provided
   if (!runId) {
@@ -54,32 +66,112 @@ export default function Lobby() {
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
 
-  const handleJoin = async () => {
-    const amount = parseFloat(depositAmount);
-    const minDepositUsdc = run.minDeposit / 100; // Convert cents to USDC
-    const maxDepositUsdc = run.maxDeposit / 100;
+  // Fetch wallet balances when connected
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchBalances();
+    }
+  }, [connected, publicKey]);
 
-    if (amount < minDepositUsdc) {
-      toast.error(`Minimum deposit is ${minDepositUsdc} USDC`);
-      return;
-    }
-    if (amount > maxDepositUsdc) {
-      toast.error(`Maximum deposit is ${maxDepositUsdc} USDC`);
-      return;
-    }
+  const fetchBalances = async () => {
+    if (!publicKey || !connected) return;
 
     try {
+      // Get SOL balance
+      const solBal = await connection.getBalance(publicKey);
+      setSolBalance(solBal / LAMPORTS_PER_SOL);
+
+      // Get USDC balance
+      try {
+        const usdcMint = new PublicKey(solanaConfig.usdcMint);
+        const ata = await getAssociatedTokenAddress(usdcMint, publicKey);
+        const tokenAccount = await connection.getTokenAccountBalance(ata);
+        setUsdcBalance(parseFloat(tokenAccount.value.amount) / 1_000_000);
+      } catch (err) {
+        setUsdcBalance(0);
+      }
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+    }
+  };
+
+  const handleJoin = async () => {
+    if (!connected || !publicKey) {
+      toast.error('Please connect your Solana wallet first');
+      return;
+    }
+
+    const amount = parseFloat(depositAmount);
+    const minDepositUsdc = run.minDeposit / 100;
+    const maxDepositUsdc = run.maxDeposit / 100;
+
+    if (isNaN(amount) || amount < minDepositUsdc || amount > maxDepositUsdc) {
+      toast.error(`Deposit amount must be between ${minDepositUsdc} and ${maxDepositUsdc} USDC`);
+      return;
+    }
+
+    if (usdcBalance !== null && amount > usdcBalance) {
+      toast.error('Insufficient USDC balance');
+      return;
+    }
+
+    setIsDepositing(true);
+
+    try {
+      // Create and send USDC transfer transaction
+      const programId = new PublicKey(solanaConfig.programId);
+      const usdcMint = new PublicKey(solanaConfig.usdcMint);
+
+      const userUsdcAccount = await getAssociatedTokenAddress(usdcMint, publicKey);
+      const poolUsdcAccount = new PublicKey(solanaConfig.communityWallet);
+
+      const amountInSmallestUnit = Math.floor(amount * 1_000_000);
+
+      const transaction = new Transaction().add(
+        createTransferInstruction(
+          userUsdcAccount,
+          poolUsdcAccount,
+          publicKey,
+          amountInSmallestUnit,
+          [],
+          TOKEN_PROGRAM_ID
+        )
+      );
+
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = publicKey;
+
+      const signature = await sendTransaction(transaction, connection);
+      
+      toast.success('Transaction sent! Waiting for confirmation...', {
+        description: `Signature: ${signature.slice(0, 8)}...`,
+      });
+
+      await connection.confirmTransaction(signature, 'confirmed');
+
+      // Now join the run via API with the transaction signature
       await joinRunMutation.mutateAsync({
         id: runId,
         data: {
           depositAmount: amount,
-          walletSignature: 'mock_signature', // TODO: Get real wallet signature
+          walletSignature: signature,
         },
       });
+
       setHasJoined(true);
-      // Success toast shown by mutation hook
-    } catch (error) {
-      // Error toast shown by mutation hook
+      await fetchBalances(); // Refresh balances
+      
+      toast.success(`Successfully deposited ${amount} USDC!`, {
+        description: 'You are now part of this run',
+      });
+    } catch (error: any) {
+      console.error('Deposit error:', error);
+      toast.error('Deposit failed', {
+        description: error.message || 'Please try again',
+      });
+    } finally {
+      setIsDepositing(false);
     }
   };
 
@@ -166,19 +258,20 @@ export default function Lobby() {
                     <div className="relative">
                       <Input
                         type="number"
-                        min="10"
-                        max="100"
+                        min={run.minDeposit / 100}
+                        max={run.maxDeposit / 100}
                         value={depositAmount}
                         onChange={(e) => setDepositAmount(e.target.value)}
                         className="pr-16 text-xl font-bold"
+                        disabled={!connected}
                       />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                         USDC
                       </div>
                     </div>
                     <div className="flex justify-between text-sm text-muted-foreground mt-2">
-                      <span>Min: 10 USDC</span>
-                      <span>Max: 100 USDC</span>
+                      <span>Min: {run.minDeposit / 100} USDC</span>
+                      <span>Max: {run.maxDeposit / 100} USDC</span>
                     </div>
                   </div>
 
@@ -188,6 +281,7 @@ export default function Lobby() {
                       size="sm"
                       onClick={() => setDepositAmount('10')}
                       className="flex-1"
+                      disabled={!connected}
                     >
                       10
                     </Button>
@@ -196,6 +290,7 @@ export default function Lobby() {
                       size="sm"
                       onClick={() => setDepositAmount('25')}
                       className="flex-1"
+                      disabled={!connected}
                     >
                       25
                     </Button>
@@ -204,6 +299,7 @@ export default function Lobby() {
                       size="sm"
                       onClick={() => setDepositAmount('50')}
                       className="flex-1"
+                      disabled={!connected}
                     >
                       50
                     </Button>
@@ -212,19 +308,60 @@ export default function Lobby() {
                       size="sm"
                       onClick={() => setDepositAmount('100')}
                       className="flex-1"
+                      disabled={!connected}
                     >
                       100
                     </Button>
                   </div>
 
-                  <Button
-                    className="w-full font-bold text-lg py-6 shadow-soft-md"
-                    style={{ background: 'linear-gradient(to right, hsl(var(--success)), hsl(142 71% 40%))' }}
-                    onClick={handleJoin}
-                  >
-                    <Coins className="mr-2 w-5 h-5" />
-                    Deposit & Join Run
-                  </Button>
+                  {!connected ? (
+                    <div className="space-y-3">
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          Connect your Solana wallet to deposit USDC and join the run
+                        </AlertDescription>
+                      </Alert>
+                      <WalletMultiButton className="!w-full !bg-primary !hover:bg-primary/90 !font-bold !text-lg !py-6" />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Wallet Balances */}
+                      <div className="bg-muted rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">USDC Balance:</span>
+                          <span className="font-bold text-foreground">
+                            {usdcBalance !== null ? `${usdcBalance.toFixed(2)} USDC` : 'Loading...'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">SOL Balance:</span>
+                          <span className="font-bold text-foreground">
+                            {solBalance !== null ? `${solBalance.toFixed(4)} SOL` : 'Loading...'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <Button
+                        className="w-full font-bold text-lg py-6 shadow-soft-md"
+                        style={{ background: 'linear-gradient(to right, hsl(var(--success)), hsl(142 71% 40%))' }}
+                        onClick={handleJoin}
+                        disabled={isDepositing || !connected}
+                      >
+                        {isDepositing ? (
+                          <>
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                            Processing Deposit...
+                          </>
+                        ) : (
+                          <>
+                            <Coins className="mr-2 w-5 h-5" />
+                            Deposit & Join Run
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
 
                   <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 text-sm">
                     <div className="font-medium text-primary mb-1">
@@ -364,9 +501,9 @@ export default function Lobby() {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {run.participants.map((participant, index) => (
                     <div
-                      key={participant.user.id}
+                      key={participant.user?.id || participant.userId}
                       className={`flex items-center justify-between p-3 rounded ${
-                        participant.user.id === currentUser.id
+                        (participant.user?.id || participant.userId) === user?.id
                           ? 'bg-primary/10 border border-primary/30'
                           : 'bg-muted'
                       }`}
@@ -386,7 +523,7 @@ export default function Lobby() {
                                 BOT
                               </Badge>
                             )}
-                            {participant.user.id === currentUser.id && (
+                            {(participant.user?.id || participant.userId) === user?.id && (
                               <Badge
                                 variant="outline"
                                 className="ml-2 text-xs border-primary text-primary"
@@ -396,7 +533,7 @@ export default function Lobby() {
                             )}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {participant.user.walletAddress}
+                            {participant.user?.walletAddress || 'Wallet hidden'}
                           </div>
                         </div>
                       </div>
