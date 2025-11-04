@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
@@ -66,14 +66,8 @@ export default function Lobby() {
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
 
-  // Fetch wallet balances when connected
-  useEffect(() => {
-    if (connected && publicKey) {
-      fetchBalances();
-    }
-  }, [connected, publicKey]);
-
-  const fetchBalances = async () => {
+  // Memoize fetchBalances to prevent infinite re-renders
+  const fetchBalances = useCallback(async () => {
     if (!publicKey || !connected) return;
 
     try {
@@ -93,7 +87,14 @@ export default function Lobby() {
     } catch (error) {
       console.error('Error fetching balances:', error);
     }
-  };
+  }, [publicKey, connected, connection]);
+
+  // Fetch wallet balances when connected
+  useEffect(() => {
+    if (connected && publicKey) {
+      fetchBalances();
+    }
+  }, [connected, publicKey, fetchBalances]);
 
   const handleJoin = async () => {
     if (!connected || !publicKey) {
