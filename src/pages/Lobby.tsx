@@ -3,7 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { PublicKey, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, createTransferInstruction } from '@solana/spl-token';
+import { 
+  getAssociatedTokenAddress, 
+  TOKEN_PROGRAM_ID, 
+  createTransferInstruction,
+  createAssociatedTokenAccountInstruction,
+  getAccount
+} from '@solana/spl-token';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -120,18 +126,58 @@ export default function Lobby() {
     setIsDepositing(true);
 
     try {
+      // Validate SOL balance for transaction fees
+      if (solBalance !== null && solBalance < 0.001) {
+        toast.error('Insufficient SOL for transaction fees', {
+          description: 'You need at least 0.001 SOL for network fees',
+        });
+        setIsDepositing(false);
+        return;
+      }
+
       // Create and send USDC transfer transaction
       const usdcMint = new PublicKey(solanaConfig.usdcMint);
+      const communityWallet = new PublicKey(solanaConfig.communityWallet);
 
       // Get user's USDC token account (their ATA)
       const userUsdcAccount = await getAssociatedTokenAddress(usdcMint, publicKey);
       
-      // Community wallet's USDC token account (where deposits go)
-      const poolUsdcAccount = new PublicKey(solanaConfig.communityWalletUSDC);
+      // Get community wallet's USDC token account (ATA)
+      const poolUsdcAccount = await getAssociatedTokenAddress(usdcMint, communityWallet);
+
+      console.log('User USDC Account:', userUsdcAccount.toBase58());
+      console.log('Pool USDC Account:', poolUsdcAccount.toBase58());
+
+      // Check if user's USDC account exists
+      let userAccountExists = true;
+      try {
+        await getAccount(connection, userUsdcAccount);
+      } catch (error) {
+        userAccountExists = false;
+        console.log('User USDC account does not exist yet');
+      }
 
       const amountInSmallestUnit = Math.floor(amount * 1_000_000);
+      const transaction = new Transaction();
 
-      const transaction = new Transaction().add(
+      // If user doesn't have USDC account, create it first
+      if (!userAccountExists) {
+        console.log('Creating user USDC token account...');
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey, // payer
+            userUsdcAccount, // account to create
+            publicKey, // owner
+            usdcMint // mint
+          )
+        );
+        toast.info('Creating your USDC account...', {
+          description: 'This is a one-time setup',
+        });
+      }
+
+      // Add the transfer instruction
+      transaction.add(
         createTransferInstruction(
           userUsdcAccount,
           poolUsdcAccount,
@@ -146,6 +192,7 @@ export default function Lobby() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
+      console.log('Sending transaction...');
       const signature = await sendTransaction(transaction, connection);
       
       toast.success('Transaction sent! Waiting for confirmation...', {
@@ -171,9 +218,28 @@ export default function Lobby() {
       });
     } catch (error: any) {
       console.error('Deposit error:', error);
-      toast.error('Deposit failed', {
-        description: error.message || 'Please try again',
-      });
+      
+      // Provide specific error messages
+      let errorMessage = 'Deposit failed';
+      let errorDescription = 'Please try again';
+      
+      if (error.message?.includes('0x1')) {
+        errorMessage = 'Insufficient USDC balance';
+        errorDescription = 'You need devnet USDC. Visit https://faucet.solana.com/ for devnet SOL, then swap for USDC';
+      } else if (error.message?.includes('insufficient funds') || error.message?.includes('0x0')) {
+        errorMessage = 'Insufficient SOL for fees';
+        errorDescription = 'You need at least 0.01 SOL for transaction fees. Get devnet SOL from https://faucet.solana.com/';
+      } else if (error.message?.includes('User rejected')) {
+        errorMessage = 'Transaction cancelled';
+        errorDescription = 'You rejected the transaction in your wallet';
+      } else if (error.message?.includes('blockhash')) {
+        errorMessage = 'Network timeout';
+        errorDescription = 'Transaction expired. Please try again';
+      } else {
+        errorDescription = error.message || 'Check console for details';
+      }
+      
+      toast.error(errorMessage, { description: errorDescription });
     } finally {
       setIsDepositing(false);
     }
