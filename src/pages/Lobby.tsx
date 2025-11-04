@@ -121,11 +121,13 @@ export default function Lobby() {
 
     try {
       // Create and send USDC transfer transaction
-      const programId = new PublicKey(solanaConfig.programId);
       const usdcMint = new PublicKey(solanaConfig.usdcMint);
 
+      // Get user's USDC token account (their ATA)
       const userUsdcAccount = await getAssociatedTokenAddress(usdcMint, publicKey);
-      const poolUsdcAccount = new PublicKey(solanaConfig.communityWallet);
+      
+      // Community wallet's USDC token account (where deposits go)
+      const poolUsdcAccount = new PublicKey(solanaConfig.communityWalletUSDC);
 
       const amountInSmallestUnit = Math.floor(amount * 1_000_000);
 

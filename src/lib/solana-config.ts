@@ -13,8 +13,14 @@ export const solanaConfig = {
   // Program ID (Instinct Trading Program)
   programId: import.meta.env.VITE_SOLANA_PROGRAM_ID || '7gmTYKqNX4xKsrd6NfNRscL3XSUoUTQyyTPhySWoABUc',
   
-  // USDC Mint Address
-  usdcMint: import.meta.env.VITE_USDC_MINT || '4S3JAFSr7HZg4T8WFPPhXs2HsSz8TyEhEyURVQUxHE5Y',
+  // USDC Mint Address (Devnet USDC)
+  usdcMint: import.meta.env.VITE_USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  
+  // Community Wallet (where deposits go)
+  communityWallet: import.meta.env.VITE_COMMUNITY_WALLET || '2f2GzFzxrvqQ2E8pAt7EVwq6YWcuZqegA5HBge7qiCfn',
+  
+  // Community Wallet USDC Token Account (ATA for receiving USDC)
+  communityWalletUSDC: import.meta.env.VITE_COMMUNITY_WALLET_USDC || '6S2bFPayJZ9J4Ao5dkaUGpwv6m8mrV2cAUmeQdtckKfY',
   
   // Explorer base URL
   explorerUrl: import.meta.env.VITE_SOLANA_NETWORK === 'mainnet-beta'
@@ -38,5 +44,6 @@ export const solanaConfig = {
 } as const;
 
 export default solanaConfig;
+
 
 
