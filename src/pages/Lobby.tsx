@@ -24,7 +24,7 @@ export default function Lobby() {
   const { connection } = useConnection();
   
   const [depositAmount, setDepositAmount] = useState('50');
-  const [selectedCoin, setSelectedCoin] = useState<string>('');
+  const [selectedCoin, setSelectedCoin] = useState<string>('SOL'); // Auto-select SOL as default
   const [hasJoined, setHasJoined] = useState(false);
   const [isDepositing, setIsDepositing] = useState(false);
   const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
@@ -185,22 +185,20 @@ export default function Lobby() {
   };
 
   const coins = [
-    { symbol: 'SOL', name: 'Solana', emoji: '◎' },
-    { symbol: 'ETH', name: 'Ethereum', emoji: 'Ξ' },
-    { symbol: 'BTC', name: 'Bitcoin', emoji: '₿' },
-    { symbol: 'BONK', name: 'Bonk', emoji: '🐕' },
-    { symbol: 'WIF', name: 'Dogwifhat', emoji: '🐶' },
-    { symbol: 'JUP', name: 'Jupiter', emoji: '🪐' },
+    { symbol: 'SOL', name: 'Solana', emoji: '◎', enabled: true },
+    { symbol: 'ETH', name: 'Ethereum', emoji: 'Ξ', enabled: false },
+    { symbol: 'BTC', name: 'Bitcoin', emoji: '₿', enabled: false },
+    { symbol: 'BONK', name: 'Bonk', emoji: '🐕', enabled: false },
+    { symbol: 'WIF', name: 'Dogwifhat', emoji: '🐶', enabled: false },
+    { symbol: 'JUP', name: 'Jupiter', emoji: '🪐', enabled: false },
   ];
 
-  const coinVotes = {
-    SOL: 2,
-    ETH: 1,
-    BTC: 0,
-    BONK: 0,
-    WIF: 0,
-    JUP: 0,
-  };
+  // Get coin votes from participants (count how many voted for each)
+  const coinVotes = run.participants?.reduce((acc: Record<string, number>, p: any) => {
+    const votedCoin = p.votedCoin || 'SOL'; // Default to SOL if no vote
+    acc[votedCoin] = (acc[votedCoin] || 0) + 1;
+    return acc;
+  }, { SOL: 0, ETH: 0, BTC: 0, BONK: 0, WIF: 0, JUP: 0 }) || { SOL: 0, ETH: 0, BTC: 0, BONK: 0, WIF: 0, JUP: 0 };
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -456,10 +454,10 @@ export default function Lobby() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-foreground">
                   <Dice5 className="w-5 h-5 text-secondary" />
-                  Vote for Trading Pair
+                  Trading Pair
                 </CardTitle>
                 <CardDescription>
-                  Final coin will be randomly selected based on votes
+                  SOL/USD perpetual futures (more pairs coming soon!)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -468,35 +466,49 @@ export default function Lobby() {
                     <Button
                       key={coin.symbol}
                       variant="outline"
-                      className={`h-20 flex flex-col items-center justify-center ${
-                        selectedCoin === coin.symbol
-                          ? 'bg-secondary/10 border-secondary'
-                          : ''
+                      className={`h-20 flex flex-col items-center justify-center relative ${
+                        coin.enabled && selectedCoin === coin.symbol
+                          ? 'bg-primary/10 border-primary'
+                          : coin.enabled
+                          ? ''
+                          : 'opacity-40 cursor-not-allowed'
                       }`}
-                      onClick={() => handleCoinSelect(coin.symbol)}
+                      onClick={() => coin.enabled && handleCoinSelect(coin.symbol)}
+                      disabled={!coin.enabled}
                     >
                       <div className="text-2xl mb-1">{coin.emoji}</div>
                       <div className="font-bold">{coin.symbol}</div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-1">
-                        {coinVotes[coin.symbol as keyof typeof coinVotes]} votes
-                      </div>
+                      {coin.enabled ? (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          {coinVotes[coin.symbol as keyof typeof coinVotes]} votes
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          Coming Soon
+                        </div>
+                      )}
+                      {coin.enabled && coin.symbol === 'SOL' && (
+                        <Badge className="absolute top-2 right-2 text-xs bg-success/20 text-success border-success/50">
+                          Active
+                        </Badge>
+                      )}
                     </Button>
                   ))}
                 </div>
 
-                {selectedCoin && (
-                  <div className="bg-secondary/10 border border-secondary/30 rounded-lg p-3 text-center text-sm text-foreground">
-                    ✅ Voted for {selectedCoin}! All coins will be weighted randomly.
+                {selectedCoin === 'SOL' && (
+                  <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 text-center text-sm text-foreground">
+                    ✅ Voted for {selectedCoin}/USD! Trading on Drift Protocol.
                   </div>
                 )}
 
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mt-3 text-xs">
-                  <div className="font-medium text-warning mb-1">
-                    🎲 Weighted Random Selection
+                <div className="bg-muted rounded-lg p-3 mt-3 text-xs">
+                  <div className="font-medium text-foreground mb-1">
+                    📊 Current Trading Pair
                   </div>
                   <div className="text-muted-foreground">
-                    More votes = higher chance. The coin with the most votes has the
-                    best odds, but it's still random!
+                    This run will trade <strong className="text-foreground">SOL/USD</strong> perpetual futures on Drift Protocol. 
+                    More trading pairs will be available in future runs!
                   </div>
                 </div>
               </CardContent>
