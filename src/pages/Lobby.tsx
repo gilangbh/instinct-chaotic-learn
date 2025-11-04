@@ -319,12 +319,23 @@ export default function Lobby() {
                   {!connected ? (
                     <div className="space-y-3">
                       <Alert>
-                        <AlertCircle className="h-4 w-4" />
+                        <Wallet className="h-4 w-4" />
                         <AlertDescription>
-                          Connect your Solana wallet to deposit USDC and join the run
+                          <div className="font-semibold mb-1">Wallet Required for Deposits</div>
+                          <p className="text-xs">
+                            To deposit USDC on-chain, please connect your Solana wallet. 
+                            {user?.walletAddress && (
+                              <span className="block mt-1 text-primary font-mono">
+                                Using: {user.walletAddress.slice(0, 4)}...{user.walletAddress.slice(-4)}
+                              </span>
+                            )}
+                          </p>
                         </AlertDescription>
                       </Alert>
                       <WalletMultiButton className="!w-full !bg-primary !hover:bg-primary/90 !font-bold !text-lg !py-6" />
+                      <p className="text-xs text-muted-foreground text-center">
+                        This enables secure USDC transfers directly from your wallet to the community pool
+                      </p>
                     </div>
                   ) : (
                     <>
