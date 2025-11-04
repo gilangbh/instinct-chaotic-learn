@@ -14,7 +14,7 @@ import {
 import { ArrowRight, TrendingUp, Users, Clock, Coins, LogOut, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers, useRuns } from '@/hooks/useApi';
-import { DepositDialog } from '@/components/DepositDialog';
+// import { DepositDialog } from '@/components/DepositDialog'; // Temporarily disabled - use Lobby page
 import { useCountdown } from '@/hooks/useCountdown';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -105,11 +105,12 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <DepositDialog 
+            {/* Deposit button temporarily disabled - use Lobby page for deposits */}
+            {/* <DepositDialog 
               runId={displayRun.id.toString()}
               minDeposit={displayRun.minDeposit / 1000} 
               maxDeposit={displayRun.maxDeposit / 1000}
-            />
+            /> */}
             <Button
               variant="outline"
               onClick={() => navigate('/profile')}
