@@ -24,7 +24,7 @@ const HeroSection = () => {
             src="/instinctfi spiky logo.png" 
             alt="InstinctFi Logo" 
             // className="w-32 h-32 md:w-40 md:h-40 animate-spin-slow"
-            className="w-16 h-16"
+            className="w-16 h-16 "
 
           />
         </div>
