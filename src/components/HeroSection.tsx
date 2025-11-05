@@ -21,11 +21,9 @@ const HeroSection = () => {
       <div className="container mx-auto px-4 text-center relative z-10">
         <div className="flex justify-center mb-6">
           <img 
-            src="/instinctfi spiky logo.png" 
+            src="/instinctfi spiky logo.png?v=2" 
             alt="InstinctFi Logo" 
-            // className="w-32 h-32 md:w-40 md:h-40 animate-spin-slow"
-            className="w-16 h-16 "
-
+            className="w-32 h-32 md:w-40 md:h-40"
           />
         </div>
         
