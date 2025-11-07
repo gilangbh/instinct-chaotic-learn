@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Sparkles, Gamepad2 } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const HeroSection = () => {
@@ -20,7 +20,11 @@ const HeroSection = () => {
 
       <div className="container mx-auto px-4 text-center relative z-10">
         <div className="flex justify-center mb-6">
-          <Sparkles className="w-16 h-16 text-primary animate-pulse" />
+          <img 
+            src="/instinctfi spiky logo.png?v=2" 
+            alt="InstinctFi Logo" 
+            className="w-32 h-32 md:w-40 md:h-40"
+          />
         </div>
         
         <h1 className="text-7xl md:text-9xl font-black mb-6 glow-cyan">
