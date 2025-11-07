@@ -372,10 +372,10 @@ export default function ActiveGame() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button
-                  className={`w-full h-20 text-lg font-bold shadow-soft-sm ${
+                  className={`w-full h-20 text-lg font-bold shadow-soft-sm text-white transition-colors ${
                     userVote === 'long'
-                      ? 'bg-success hover:bg-success/90'
-                      : 'bg-success/80 hover:bg-success'
+                      ? 'bg-[hsl(var(--success))] hover:bg-[hsl(var(--success))]'
+                      : 'bg-[hsl(var(--success))]/80 hover:bg-[hsl(var(--success))]'
                   }`}
                   onClick={() => handleVote('long')}
                   disabled={userVote !== null}
@@ -393,10 +393,10 @@ export default function ActiveGame() {
                 </Button>
 
                 <Button
-                  className={`w-full h-20 text-lg font-bold shadow-soft-sm ${
+                  className={`w-full h-20 text-lg font-bold shadow-soft-sm text-white transition-colors ${
                     userVote === 'short'
-                      ? 'bg-destructive hover:bg-destructive/90'
-                      : 'bg-destructive/80 hover:bg-destructive'
+                      ? 'bg-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]'
+                      : 'bg-[hsl(var(--destructive))]/80 hover:bg-[hsl(var(--destructive))]'
                   }`}
                   onClick={() => handleVote('short')}
                   disabled={userVote !== null}
