@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Heart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import api from "@/lib/api";
 
 const ClosingSection = () => {
   const [email, setEmail] = useState("");
@@ -19,31 +20,14 @@ const ClosingSection = () => {
     setIsSubmitting(true);
     
     try {
-      // Web3Forms API integration
-      const response = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: JSON.stringify({
-          access_key: "b66642de-8e35-44f4-b699-9f439f2c552d",
-          //access_key: import.meta.env.VITE_WEB3FORMS_ACCESS_KEY,
-          email: email,
-          subject: "New Waitlist Signup - Instinct.fi",
-          from_name: "Instinct.fi Waitlist",
-          message: `New waitlist signup from: ${email}`,
-        }),
-      });
+      const response = await api.waitlist.subscribe(email.trim());
 
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success("You're on the waitlist! We'll be in touch soon.");
-        setEmail("");
-      } else {
-        throw new Error(data.message || "Submission failed");
+      if (!response.success) {
+        throw new Error(response.error || "Submission failed");
       }
+
+      toast.success("You're on the waitlist! We'll be in touch soon.");
+      setEmail("");
     } catch (error) {
       console.error("Form submission error:", error);
       toast.error("Something went wrong. Please try again.");

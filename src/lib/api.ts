@@ -146,6 +146,10 @@ export const api = {
       apiClient.post<User>('/auth/wallet/verify', data),
   },
 
+  waitlist: {
+    subscribe: (email: string) => apiClient.post<{ messageId: string }>('/waitlist', { email }),
+  },
+
   // Health check
   health: () => apiClient.get<any>('/health'),
 };
