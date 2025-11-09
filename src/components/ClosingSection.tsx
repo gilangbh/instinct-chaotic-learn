@@ -19,22 +19,19 @@ const ClosingSection = () => {
     setIsSubmitting(true);
     
     try {
-      // Web3Forms API integration
-      const response = await fetch("https://api.web3forms.com/submit", {
+      const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+      const response = await fetch(`${apiBaseUrl}/waitlist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json",
         },
-        body: JSON.stringify({
-          access_key: "b66642de-8e35-44f4-b699-9f439f2c552d",
-          //access_key: import.meta.env.VITE_WEB3FORMS_ACCESS_KEY,
-          email: email,
-          subject: "New Waitlist Signup - Instinct.fi",
-          from_name: "Instinct.fi Waitlist",
-          message: `New waitlist signup from: ${email}`,
-        }),
+        body: JSON.stringify({ email: email.trim() }),
       });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Submission failed (${response.status})`);
+      }
 
       const data = await response.json();
 
@@ -42,7 +39,7 @@ const ClosingSection = () => {
         toast.success("You're on the waitlist! We'll be in touch soon.");
         setEmail("");
       } else {
-        throw new Error(data.message || "Submission failed");
+        throw new Error(data.error || "Submission failed");
       }
     } catch (error) {
       console.error("Form submission error:", error);
