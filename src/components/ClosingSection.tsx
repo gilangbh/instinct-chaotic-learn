@@ -4,6 +4,18 @@ import { Heart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+const resolveApiBaseUrl = (): string => {
+  const raw = import.meta.env.VITE_API_URL as string | undefined;
+  const fallback = "http://localhost:3001/api/v1";
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const trimmed = raw.replace(/\/+$/, "");
+  return trimmed.includes("/api/") ? trimmed : `${trimmed}/api/v1`;
+};
+
 const ClosingSection = () => {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,7 +31,7 @@ const ClosingSection = () => {
     setIsSubmitting(true);
     
     try {
-      const apiBaseUrl = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+      const apiBaseUrl = resolveApiBaseUrl();
       const response = await fetch(`${apiBaseUrl}/waitlist`, {
         method: "POST",
         headers: {
