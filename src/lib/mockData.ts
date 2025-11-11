@@ -513,7 +513,7 @@ export const runHistory: Run[] = [
 
 // Helper Functions
 export const formatUSDC = (amount: number): string => {
-  return (amount / 1000).toFixed(2);
+  return (amount / 100).toFixed(2);
 };
 
 export const formatTime = (seconds: number): string => {

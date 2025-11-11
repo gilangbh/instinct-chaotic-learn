@@ -99,6 +99,8 @@ export default function Lobby() {
     return null;
   }
 
+  const participantCount = run.participantCount ?? run.participants?.length ?? 0;
+
   const isParticipating = run.participants?.some(
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
@@ -137,13 +139,10 @@ export default function Lobby() {
 
       // Create and send USDC transfer transaction
       const usdcMint = new PublicKey(solanaConfig.usdcMint);
-      const communityWallet = new PublicKey(solanaConfig.communityWallet);
+      const poolUsdcAccount = new PublicKey(solanaConfig.communityWalletUSDC);
 
       // Get user's USDC token account (their ATA)
       const userUsdcAccount = await getAssociatedTokenAddress(usdcMint, publicKey);
-      
-      // Get community wallet's USDC token account (ATA)
-      const poolUsdcAccount = await getAssociatedTokenAddress(usdcMint, communityWallet);
 
       console.log('User USDC Account:', userUsdcAccount.toBase58());
       console.log('Pool USDC Account:', poolUsdcAccount.toBase58());
@@ -155,6 +154,17 @@ export default function Lobby() {
       } catch (error) {
         userAccountExists = false;
         console.log('User USDC account does not exist yet');
+      }
+
+      // Verify pool USDC account exists
+      try {
+        await getAccount(connection, poolUsdcAccount);
+      } catch (error) {
+        toast.error('Pool USDC account not found', {
+          description: 'Please contact support – community vault is missing.',
+        });
+        setIsDepositing(false);
+        return;
       }
 
       const amountInSmallestUnit = Math.floor(amount * 1_000_000);
@@ -470,8 +480,9 @@ export default function Lobby() {
                     <div className="text-sm text-muted-foreground mb-1">Your Position</div>
                     <div className="text-xl font-bold text-foreground">
                       {(
-                        (parseFloat(depositAmount) * 1000) /
-                        (run.totalPool + parseFloat(depositAmount) * 1000)
+                        (parseFloat(depositAmount) * 100) /
+                        Math.max(run.totalPool + parseFloat(depositAmount) * 100, 1)
+                      * 100
                       ).toFixed(1)}
                       % of pool
                     </div>
@@ -498,7 +509,7 @@ export default function Lobby() {
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
                   <span className="text-muted-foreground">Players</span>
                   <span className="text-xl font-bold text-foreground">
-                    {run.participantCount} / {run.maxParticipants}
+                    {participantCount} / {run.maxParticipants}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
@@ -587,7 +598,7 @@ export default function Lobby() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-foreground">
                   <Users className="w-5 h-5 text-primary" />
-                  Current Players ({run.participantCount})
+                  Current Players ({participantCount})
                 </CardTitle>
               </CardHeader>
               <CardContent>

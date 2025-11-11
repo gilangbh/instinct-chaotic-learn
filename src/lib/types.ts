@@ -171,6 +171,7 @@ export interface UpdateUserRequest {
 
 export interface JoinRunRequest {
   depositAmount: number;
+  walletSignature?: string;
 }
 
 export interface CastVoteRequest {
