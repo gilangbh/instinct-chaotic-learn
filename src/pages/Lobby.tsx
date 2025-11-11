@@ -144,9 +144,6 @@ export default function Lobby() {
       // Get user's USDC token account (their ATA)
       const userUsdcAccount = await getAssociatedTokenAddress(usdcMint, publicKey);
 
-      console.log('User USDC Account:', userUsdcAccount.toBase58());
-      console.log('Pool USDC Account:', poolUsdcAccount.toBase58());
-
       // Check if user's USDC account exists
       let userAccountExists = true;
       try {
@@ -229,6 +226,11 @@ export default function Lobby() {
     } catch (error: any) {
       console.error('Deposit error:', error);
       
+      const logs = (error as any)?.logs;
+      if (Array.isArray(logs) && logs.length) {
+        console.error('Transaction logs:', logs.join('\n'));
+      }
+      
       // Provide specific error messages
       let errorMessage = 'Deposit failed';
       let errorDescription = 'Please try again';
@@ -245,6 +247,8 @@ export default function Lobby() {
       } else if (error.message?.includes('blockhash')) {
         errorMessage = 'Network timeout';
         errorDescription = 'Transaction expired. Please try again';
+      } else if (error.message?.includes('0x')) {
+        errorDescription = 'Check if the community USDC vault exists and has been initialized.';
       } else {
         errorDescription = error.message || 'Check console for details';
       }
