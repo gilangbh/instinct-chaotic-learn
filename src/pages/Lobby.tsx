@@ -65,9 +65,28 @@ export default function Lobby() {
 
   // Fetch wallet balances when connected (MUST be before early returns)
   useEffect(() => {
-    if (connected && publicKey) {
-      fetchBalances();
+    if (!connected || !publicKey) {
+      return;
     }
+
+    let cancelled = false;
+
+    const refresh = async () => {
+      await fetchBalances();
+    };
+
+    void refresh();
+
+    const intervalId = window.setInterval(() => {
+      if (!cancelled) {
+        void refresh();
+      }
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, [connected, publicKey, fetchBalances]);
 
   // NOW we can do conditional logic and early returns

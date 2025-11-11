@@ -20,7 +20,7 @@ export const solanaConfig = {
   communityWallet: import.meta.env.VITE_COMMUNITY_WALLET || '2f2GzFzxrvqQ2E8pAt7EVwq6YWcuZqegA5HBge7qiCfn',
   
   // Community Wallet USDC Token Account (ATA for receiving USDC)
-  communityWalletUSDC: import.meta.env.VITE_COMMUNITY_WALLET_USDC || '6S2bFPayJZ9J4Ao5dkaUGpwv6m8mrV2cAUmeQdtckKfY',
+  communityWalletUSDC: import.meta.env.VITE_COMMUNITY_WALLET_USDC || 'He3sCJtvZzeb8fuafZ7cVMeJQVHtjvwfundzJVBCxdS7',
   
   // Explorer base URL
   explorerUrl: import.meta.env.VITE_SOLANA_NETWORK === 'mainnet-beta'
