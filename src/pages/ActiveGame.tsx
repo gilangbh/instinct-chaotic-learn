@@ -45,32 +45,31 @@ export default function ActiveGame() {
   const [displayTimeRemaining, setDisplayTimeRemaining] = useState<number>(0);
 
   const enableQueries = Boolean(runId);
-  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '', { enabled: enableQueries });
-  const { data: votingRoundResponse, isLoading: votingLoading } = useRuns.useGetCurrentVotingRound(runId || '', { enabled: enableQueries });
-  const { data: tradesResponse } = useRuns.useGetRunTrades(runId || '', { enabled: enableQueries });
+  const runQuery = useRuns.useGetRun(runId || '', { enabled: enableQueries });
+  const votingRoundQuery = useRuns.useGetCurrentVotingRound(runId || '', { enabled: enableQueries });
+  const tradesQuery = useRuns.useGetRunTrades(runId || '', { enabled: enableQueries });
   const castVoteMutation = useRuns.useCastVote();
 
-  // Extract run data
-  const run = runResponse?.data;
-  const currentVotingRound = votingRoundResponse?.data;
-  const trades = tradesResponse?.data || [];
+  const marketSymbolEnabled = enableQueries && Boolean(runQuery.data?.data?.coin);
+  const priceHistoryQuery = useMarket.useGetPriceHistory(runQuery.data?.data?.coin ?? '', '1h', { enabled: marketSymbolEnabled });
+  const currentPriceQuery = useMarket.useGetCurrentPrice(runQuery.data?.data?.coin ?? '', { enabled: marketSymbolEnabled });
 
-  const marketSymbol = run?.coin ?? '';
-  const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
-    useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: enableQueries && Boolean(marketSymbol) });
-  const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol, { enabled: enableQueries && Boolean(marketSymbol) });
+  const run = runQuery.data?.data;
+  const currentVotingRound = votingRoundQuery.data?.data;
+  const trades = tradesQuery.data?.data || [];
 
-  const isLoading = runLoading || votingLoading || !run;
-  const shouldRedirect = Boolean(run) && run!.status !== 'ACTIVE';
+  const isLoading = runQuery.isLoading || votingRoundQuery.isLoading || !run;
+  const shouldRedirect = Boolean(run) && run.status !== 'ACTIVE';
 
   console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
   const redirectToastShown = useRef(false);
 
   useMemo(() => {
+    const dataUpdatedAt = priceHistoryQuery.dataUpdatedAt;
     if (dataUpdatedAt) {
       setLastUpdateTime(new Date(dataUpdatedAt));
     }
-  }, [dataUpdatedAt]);
+  }, [priceHistoryQuery.dataUpdatedAt]);
 
   useEffect(() => {
     if (currentVotingRound?.timeRemaining != null) {
@@ -164,8 +163,8 @@ export default function ActiveGame() {
   // Format chart data - use real data if available
   const chartData = useMemo(() => {
     try {
-      if (priceHistoryData?.success && priceHistoryData.data) {
-        const priceData = priceHistoryData.data;
+      if (priceHistoryQuery.data?.success && priceHistoryQuery.data.data) {
+        const priceData = priceHistoryQuery.data.data;
         // Assuming the API returns an array of price objects with timestamp and price
         return priceData.slice(-60).map((d: any) => ({
           time: new Date(d.timestamp).toLocaleTimeString('en-US', {
@@ -180,7 +179,7 @@ export default function ActiveGame() {
       console.error('Error formatting chart data:', error);
       return [];
     }
-  }, [priceHistoryData]);
+  }, [priceHistoryQuery.data]);
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -297,20 +296,20 @@ export default function ActiveGame() {
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-foreground">
-                      ${currentPriceData?.success && currentPriceData.data 
-                        ? currentPriceData.data.price.toFixed(2)
+                      ${currentPriceQuery.data?.success && currentPriceQuery.data.data 
+                        ? currentPriceQuery.data.data.price.toFixed(2)
                         : currentVotingRound.currentPrice}
                     </div>
-                    {currentPriceData?.success && currentPriceData.data ? (
+                    {currentPriceQuery.data?.success && currentPriceQuery.data.data ? (
                       <div
                         className={`text-sm ${
-                          (currentPriceData.data.change24h || 0) >= 0
+                          (currentPriceQuery.data.data.change24h || 0) >= 0
                             ? 'text-success'
                             : 'text-destructive'
                         }`}
                       >
-                        {(currentPriceData.data.change24h || 0) >= 0 ? '+' : ''}
-                        {(currentPriceData.data.change24h || 0).toFixed(2)}% 24h
+                        {(currentPriceQuery.data.data.change24h || 0) >= 0 ? '+' : ''}
+                        {(currentPriceQuery.data.data.change24h || 0).toFixed(2)}% 24h
                       </div>
                     ) : (
                       <div
@@ -329,14 +328,14 @@ export default function ActiveGame() {
               </CardHeader>
               <CardContent>
                 <div className="h-64">
-                  {isPriceLoading ? (
+                  {priceHistoryQuery.isLoading ? (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
                         <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
                         <p className="text-sm text-muted-foreground">Loading price data...</p>
                       </div>
                     </div>
-                  ) : priceError ? (
+                  ) : priceHistoryQuery.error ? (
                     <div className="h-full flex items-center justify-center">
                       <div className="text-center">
                         <p className="text-sm text-destructive mb-2">Failed to load price data</p>
