@@ -129,6 +129,10 @@ export default function Lobby() {
     );
   }
 
+  if (run.status !== 'WAITING') {
+    return null;
+  }
+
   const participantCount = run.participantCount ?? run.participants?.length ?? 0;
 
   const isParticipating = run.participants?.some(
