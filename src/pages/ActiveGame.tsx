@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -59,20 +59,19 @@ export default function ActiveGame() {
     useMarket.useGetPriceHistory(marketSymbol);
   const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol);
 
+  const redirectToastShown = useRef(false);
+
   useEffect(() => {
-    if (!runId || runLoading || votingLoading) {
+    if (!run || run.status === 'ACTIVE') {
+      redirectToastShown.current = false;
       return;
     }
 
-    if (!run) {
-      return;
-    }
-
-    if (run.status !== 'ACTIVE') {
+    if (!redirectToastShown.current) {
       toast.error('This run is not active');
-      navigate('/dashboard', { replace: true });
+      redirectToastShown.current = true;
     }
-  }, [run, runId, navigate, runLoading, votingLoading]);
+  }, [run]);
 
   // Show loading state
   if (runLoading || votingLoading || !run) {
@@ -87,7 +86,11 @@ export default function ActiveGame() {
   }
 
   if (!runId) {
-    return null;
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (run.status !== 'ACTIVE') {
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Update last update time when data changes
