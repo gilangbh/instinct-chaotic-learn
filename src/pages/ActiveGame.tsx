@@ -81,7 +81,7 @@ export default function ActiveGame() {
     );
   }
 
-  if (!runId || run.status !== 'ACTIVE') {
+  if (!runId) {
     return null;
   }
 
