@@ -42,6 +42,7 @@ export default function ActiveGame() {
   const { user } = useAuth();
   const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
+  const [displayTimeRemaining, setDisplayTimeRemaining] = useState<number>(0);
 
   // Fetch run data from API
   const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '');
@@ -102,6 +103,26 @@ export default function ActiveGame() {
     }
   }, [dataUpdatedAt]);
 
+  useEffect(() => {
+    if (currentVotingRound?.timeRemaining != null) {
+      setDisplayTimeRemaining(currentVotingRound.timeRemaining);
+    }
+  }, [currentVotingRound?.round, currentVotingRound?.timeRemaining]);
+
+  useEffect(() => {
+    if (!run || run.status !== 'ACTIVE') {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setDisplayTimeRemaining((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [run?.id, run?.status]);
+
   const userParticipation = run.participants?.find(
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
@@ -125,7 +146,7 @@ export default function ActiveGame() {
       await castVoteMutation.mutateAsync({
         id: runId,
         round: currentVotingRound.round,
-        choice: vote,
+        choice: vote.toUpperCase(),
       });
 
       const voteLabels = {
@@ -462,10 +483,10 @@ export default function ActiveGame() {
                     Time to Vote
                   </div>
                   <div className="text-5xl font-mono font-bold text-primary mb-2">
-                    {formatTime(currentVotingRound.timeRemaining)}
+                    {formatTime(displayTimeRemaining)}
                   </div>
                   <Progress
-                    value={(currentVotingRound.timeRemaining / 600) * 100}
+                    value={(displayTimeRemaining / (run.votingInterval * 60)) * 100}
                     className="h-2"
                   />
                 </div>
