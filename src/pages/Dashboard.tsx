@@ -72,6 +72,14 @@ export default function Dashboard() {
   const isActive = displayRun.status === 'active';
   const isWaiting = displayRun.status === 'waiting';
 
+  const totalPoolFromParticipants =
+    displayRun.participants?.reduce((sum: number, participant: any) => {
+      return sum + (participant.depositAmount || 0);
+    }, 0) ?? 0;
+
+  const displayTotalPoolCents =
+    totalPoolFromParticipants > 0 ? totalPoolFromParticipants : displayRun.totalPool;
+
   // Use smooth client-side countdown
   const smoothCountdown = useCountdown(displayRun.countdown, displayRun.countdown);
 
@@ -81,7 +89,9 @@ export default function Dashboard() {
   const isParticipating = !!userParticipation;
 
   const profitLoss = displayRun.totalPool - displayRun.startingPool;
-  const profitLossPercent = ((profitLoss / displayRun.startingPool) * 100).toFixed(1);
+  const profitLossPercent = displayRun.startingPool > 0
+    ? ((profitLoss / displayRun.startingPool) * 100).toFixed(1)
+    : '0.0';
   const isProfit = profitLoss >= 0;
 
   const progress = isActive
@@ -219,7 +229,7 @@ export default function Dashboard() {
                     Total Pool
                   </span>
                   <span className="text-2xl font-bold text-foreground">
-                    {formatUSDC(displayRun.totalPool)} USDC
+                    {formatUSDC(displayTotalPoolCents)} USDC
                   </span>
                 </div>
 

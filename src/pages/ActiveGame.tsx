@@ -62,6 +62,20 @@ export default function ActiveGame() {
   const isLoading = runQuery.isLoading || runQuery.isFetching || votingRoundQuery.isLoading || votingRoundQuery.isFetching || !run;
   const shouldRedirect = Boolean(run) && run.status !== 'ACTIVE';
 
+  const totalPoolFromParticipants =
+    run?.participants?.reduce((sum: number, participant: any) => {
+      return sum + (participant.depositAmount || 0);
+    }, 0) ?? 0;
+
+  const totalPoolCents =
+    totalPoolFromParticipants > 0 ? totalPoolFromParticipants : run?.totalPool ?? 0;
+
+  const userParticipation = run?.participants?.find(
+    (p: any) => p.userId === user?.id || p.user?.id === user?.id
+  );
+
+  const userDepositCents = userParticipation?.depositAmount ?? 0;
+
   console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
   const redirectToastShown = useRef(false);
 
@@ -122,10 +136,6 @@ export default function ActiveGame() {
   if (!runId || shouldRedirect) {
     return <Navigate to="/dashboard" replace />;
   }
-
-  const userParticipation = run.participants?.find(
-    (p: any) => p.userId === user?.id || p.user?.id === user?.id
-  );
 
   const profitLoss = run.totalPool - run.startingPool;
   const profitLossPercent = run.startingPool > 0 
@@ -218,7 +228,7 @@ export default function ActiveGame() {
             <CardContent className="p-4">
               <div className="text-sm text-muted-foreground mb-1">Total Pool</div>
               <div className="text-2xl font-bold text-foreground">
-                {formatUSDC(run.totalPool)} USDC
+                {formatUSDC(totalPoolCents)} USDC
               </div>
               <div
                 className={`text-sm font-medium ${
@@ -236,14 +246,11 @@ export default function ActiveGame() {
             <CardContent className="p-4">
               <div className="text-sm text-muted-foreground mb-1">Your Deposit</div>
               <div className="text-2xl font-bold text-foreground">
-                {formatUSDC(userParticipation?.depositAmount || 0)} USDC
+                {formatUSDC(userDepositCents)} USDC
               </div>
               <div className="text-sm text-muted-foreground">
-                {userParticipation
-                  ? `${(
-                      (userParticipation.depositAmount / run.startingPool) *
-                      100
-                    ).toFixed(1)}% of pool`
+                {userDepositCents > 0 && totalPoolCents > 0
+                  ? `${((userDepositCents / totalPoolCents) * 100).toFixed(1)}% of pool`
                   : 'Spectating'}
               </div>
             </CardContent>

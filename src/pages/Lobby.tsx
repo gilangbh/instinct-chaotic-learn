@@ -139,6 +139,20 @@ export default function Lobby() {
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
   );
 
+  const totalPoolFromParticipants =
+    run.participants?.reduce((sum: number, participant: any) => {
+      return sum + (participant.depositAmount || 0);
+    }, 0) ?? 0;
+
+  const totalPoolCents =
+    totalPoolFromParticipants > 0 ? totalPoolFromParticipants : run.totalPool;
+
+  const userParticipation = run.participants?.find(
+    (p: any) => p.userId === user?.id || p.user?.id === user?.id
+  );
+
+  const userDepositCents = userParticipation?.depositAmount ?? 0;
+
   const handleJoin = async () => {
     if (!connected || !publicKey) {
       toast.error('Please connect your Solana wallet first');
@@ -512,16 +526,19 @@ export default function Lobby() {
                   </h3>
                   <p className="text-muted-foreground mb-4">
                     You've joined the run with{' '}
-                    <span className="font-bold text-foreground">{depositAmount} USDC</span>
+                    <span className="font-bold text-foreground">
+                      {formatUSDC(userDepositCents || parseFloat(depositAmount) * 100)} USDC
+                    </span>
                   </p>
                   <div className="bg-muted rounded-lg p-4">
                     <div className="text-sm text-muted-foreground mb-1">Your Position</div>
                     <div className="text-xl font-bold text-foreground">
-                      {(
-                        (parseFloat(depositAmount) * 100) /
-                        Math.max(run.totalPool + parseFloat(depositAmount) * 100, 1)
-                      * 100
-                      ).toFixed(1)}
+                      {totalPoolCents > 0
+                        ? ((
+                            (userDepositCents || parseFloat(depositAmount) * 100) /
+                            totalPoolCents
+                          ) * 100).toFixed(1)
+                        : '0.0'}
                       % of pool
                     </div>
                   </div>
@@ -541,7 +558,7 @@ export default function Lobby() {
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
                   <span className="text-muted-foreground">Total Pool</span>
                   <span className="text-2xl font-bold text-foreground">
-                    {formatUSDC(run.totalPool)} USDC
+                    {formatUSDC(totalPoolCents)} USDC
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-muted rounded">
