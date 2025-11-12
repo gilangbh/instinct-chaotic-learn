@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,16 +43,10 @@ export default function ActiveGame() {
   const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
 
-  // Redirect to dashboard if no runId provided
-  if (!runId) {
-    navigate('/dashboard');
-    return null;
-  }
-
   // Fetch run data from API
-  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId);
-  const { data: votingRoundResponse, isLoading: votingLoading } = useRuns.useGetCurrentVotingRound(runId);
-  const { data: tradesResponse } = useRuns.useGetRunTrades(runId);
+  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '');
+  const { data: votingRoundResponse, isLoading: votingLoading } = useRuns.useGetCurrentVotingRound(runId || '');
+  const { data: tradesResponse } = useRuns.useGetRunTrades(runId || '');
   const castVoteMutation = useRuns.useCastVote();
 
   // Extract run data
@@ -72,19 +66,32 @@ export default function ActiveGame() {
     );
   }
 
-  // Redirect if run is not active
+  useEffect(() => {
+    if (!run || !runId) {
+      return;
+    }
+
+    if (run.status !== 'ACTIVE') {
+      toast.error('This run is not active');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [run, runId, navigate]);
+
+  if (!runId) {
+    return null;
+  }
+
   if (run.status !== 'ACTIVE') {
-    toast.error('This run is not active');
-    navigate('/dashboard');
     return null;
   }
 
   // Fetch real market price data
+  const marketSymbol = run?.coin ?? '';
   const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
-    useMarket.useGetPriceHistory(run.coin);
+    useMarket.useGetPriceHistory(marketSymbol);
 
   // Fetch real current price and 24h change
-  const { data: currentPriceData } = useMarket.useGetCurrentPrice(run.coin);
+  const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol);
 
   // Update last update time when data changes
   useMemo(() => {
