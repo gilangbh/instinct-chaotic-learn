@@ -59,6 +59,8 @@ export default function ActiveGame() {
     useMarket.useGetPriceHistory(marketSymbol);
   const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol);
 
+  console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
+
   const redirectToastShown = useRef(false);
 
   useEffect(() => {
