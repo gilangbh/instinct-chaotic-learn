@@ -54,6 +54,11 @@ export default function ActiveGame() {
   const currentVotingRound = votingRoundResponse?.data;
   const trades = tradesResponse?.data || [];
 
+  const marketSymbol = run?.coin ?? '';
+  const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
+    useMarket.useGetPriceHistory(marketSymbol);
+  const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol);
+
   useEffect(() => {
     if (!runId || runLoading || votingLoading) {
       return;
@@ -84,14 +89,6 @@ export default function ActiveGame() {
   if (!runId) {
     return null;
   }
-
-  // Fetch real market price data
-  const marketSymbol = run?.coin ?? '';
-  const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
-    useMarket.useGetPriceHistory(marketSymbol);
-
-  // Fetch real current price and 24h change
-  const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol);
 
   // Update last update time when data changes
   useMemo(() => {
