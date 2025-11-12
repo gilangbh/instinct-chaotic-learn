@@ -60,39 +60,12 @@ export default function ActiveGame() {
     useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: enableQueries && Boolean(marketSymbol) });
   const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol, { enabled: enableQueries && Boolean(marketSymbol) });
 
-  console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
+  const isLoading = runLoading || votingLoading || !run;
+  const shouldRedirect = Boolean(run) && run!.status !== 'ACTIVE';
 
+  console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
   const redirectToastShown = useRef(false);
 
-  useEffect(() => {
-    if (!run || run.status === 'ACTIVE') {
-      redirectToastShown.current = false;
-      return;
-    }
-
-    if (!redirectToastShown.current) {
-      toast.error('This run is not active');
-      redirectToastShown.current = true;
-    }
-  }, [run]);
-
-  // Show loading state
-  if (runLoading || votingLoading || !run) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading game data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (run.status !== 'ACTIVE') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // Update last update time when data changes
   useMemo(() => {
     if (dataUpdatedAt) {
       setLastUpdateTime(new Date(dataUpdatedAt));
@@ -106,7 +79,7 @@ export default function ActiveGame() {
   }, [currentVotingRound?.round, currentVotingRound?.timeRemaining]);
 
   useEffect(() => {
-    if (!run || run.status !== 'ACTIVE') {
+    if (!run || shouldRedirect) {
       return;
     }
 
@@ -117,7 +90,38 @@ export default function ActiveGame() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [run?.id, run?.status]);
+  }, [run?.id, shouldRedirect]);
+
+  useEffect(() => {
+    if (!run) {
+      return;
+    }
+
+    if (!shouldRedirect) {
+      redirectToastShown.current = false;
+      return;
+    }
+
+    if (!redirectToastShown.current) {
+      toast.error('This run is not active');
+      redirectToastShown.current = true;
+    }
+  }, [run, shouldRedirect]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading game data...</p>
+        </div>
+      </div>
+    );
+  }
+ 
+  if (!runId || shouldRedirect) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const userParticipation = run.participants?.find(
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
