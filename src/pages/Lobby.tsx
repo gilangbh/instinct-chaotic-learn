@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
@@ -99,6 +99,24 @@ export default function Lobby() {
   // Extract run data
   const run = runResponse?.data;
 
+  const redirectHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (!run || !runId || redirectHandledRef.current) {
+      return;
+    }
+
+    if (run.status === 'ACTIVE') {
+      redirectHandledRef.current = true;
+      toast.success('Run has started! Redirecting to the game...');
+      navigate(`/game/${runId}`, { replace: true });
+    } else if (run.status !== 'WAITING') {
+      redirectHandledRef.current = true;
+      toast.error('This lobby is no longer accepting participants');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [run, runId, navigate]);
+
   // Show loading state
   if (runLoading || !run) {
     return (
@@ -109,13 +127,6 @@ export default function Lobby() {
         </div>
       </div>
     );
-  }
-
-  // Redirect if run is not waiting
-  if (run.status !== 'WAITING') {
-    toast.error('This lobby is no longer accepting participants');
-    navigate('/dashboard');
-    return null;
   }
 
   const participantCount = run.participantCount ?? run.participants?.length ?? 0;
