@@ -54,6 +54,21 @@ export default function ActiveGame() {
   const currentVotingRound = votingRoundResponse?.data;
   const trades = tradesResponse?.data || [];
 
+  useEffect(() => {
+    if (!runId || runLoading || votingLoading) {
+      return;
+    }
+
+    if (!run) {
+      return;
+    }
+
+    if (run.status !== 'ACTIVE') {
+      toast.error('This run is not active');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [run, runId, navigate, runLoading, votingLoading]);
+
   // Show loading state
   if (runLoading || votingLoading || !run) {
     return (
@@ -66,22 +81,7 @@ export default function ActiveGame() {
     );
   }
 
-  useEffect(() => {
-    if (!run || !runId) {
-      return;
-    }
-
-    if (run.status !== 'ACTIVE') {
-      toast.error('This run is not active');
-      navigate('/dashboard', { replace: true });
-    }
-  }, [run, runId, navigate]);
-
-  if (!runId) {
-    return null;
-  }
-
-  if (run.status !== 'ACTIVE') {
+  if (!runId || run.status !== 'ACTIVE') {
     return null;
   }
 
