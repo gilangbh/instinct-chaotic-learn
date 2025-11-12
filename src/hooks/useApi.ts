@@ -123,7 +123,7 @@ export const useRuns = {
       queryKey: ['run', id],
       queryFn: () => api.runs.getById(id),
       enabled: !!id,
-      refetchInterval: 2000, // Refetch every 2 seconds for active runs
+      refetchInterval: 5000, // Refetch every 5 seconds
     });
   },
 
@@ -151,7 +151,7 @@ export const useRuns = {
       queryKey: ['run', id, 'voting-round'],
       queryFn: () => api.runs.getCurrentVotingRound(id),
       enabled: !!id,
-      refetchInterval: 1000, // Refetch every second for voting rounds
+      refetchInterval: 3000, // Refetch every 3 seconds
     });
   },
 
