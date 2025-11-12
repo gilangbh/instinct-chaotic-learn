@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { formatUSDC, formatTime } from '@/lib/mockData';
+import { useCountdown } from '@/hooks/useCountdown';
 import { ArrowLeft, Coins, Users, Clock, Dice5, Plus, Wallet, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -316,6 +317,8 @@ export default function Lobby() {
     return acc;
   }, { SOL: 0, ETH: 0, BTC: 0, BONK: 0, WIF: 0, JUP: 0 }) || { SOL: 0, ETH: 0, BTC: 0, BONK: 0, WIF: 0, JUP: 0 };
 
+  const smoothCountdown = useCountdown(run.countdown ?? 0, run.countdown ?? 0);
+
   return (
     <div className="min-h-screen bg-gradient-subtle">
       {/* Header */}
@@ -346,7 +349,7 @@ export default function Lobby() {
             <div className="text-6xl mb-4">⏰</div>
             <h2 className="text-3xl font-bold mb-2 text-foreground">Game Starting Soon!</h2>
             <div className="text-5xl font-mono font-bold text-primary my-6">
-              {formatTime(run.countdown || 0)}
+              {formatTime(smoothCountdown)}
             </div>
             <p className="text-muted-foreground">
               Join now or watch the action! Game starts when the timer hits zero.
