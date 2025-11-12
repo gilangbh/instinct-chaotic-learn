@@ -9,8 +9,8 @@ import { useState, useEffect, useRef } from 'react';
  */
 export function useCountdown(initialSeconds: number | null, serverCountdown: number | null) {
   const [countdown, setCountdown] = useState<number>(initialSeconds || 0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSyncRef = useRef<number>(Date.now());
+  const animationFrameRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number>(performance.now());
 
   // Sync with server countdown when it changes
   useEffect(() => {
@@ -19,42 +19,46 @@ export function useCountdown(initialSeconds: number | null, serverCountdown: num
       const diff = Math.abs(serverCountdown - countdown);
       if (diff > 2 || countdown === 0) {
         setCountdown(serverCountdown);
-        lastSyncRef.current = Date.now();
+        lastTickRef.current = performance.now();
       }
     }
   }, [serverCountdown]);
 
   // Client-side countdown ticker
   useEffect(() => {
-    // Clear existing interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
-    // Only run countdown if > 0
-    if (countdown > 0) {
-      intervalRef.current = setInterval(() => {
+    const tick = (now: number) => {
+      const elapsedMs = now - lastTickRef.current;
+      if (elapsedMs >= 1000) {
+        const secondsElapsed = Math.floor(elapsedMs / 1000);
+        lastTickRef.current = now;
         setCountdown((prev) => {
-          if (prev <= 0) {
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current);
-            }
-            return 0;
-          }
-          return prev - 1;
+          const next = prev - secondsElapsed;
+          return next > 0 ? next : 0;
         });
-      }, 1000); // Tick every second
+      }
+
+      animationFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    if (countdown > 0 && animationFrameRef.current === null) {
+      animationFrameRef.current = requestAnimationFrame(tick);
     }
 
     // Cleanup on unmount
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
-  }, [countdown > 0]);
+  }, [countdown]);
 
   return countdown;
 }
+
+
+
+
+
 
 
