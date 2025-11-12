@@ -44,10 +44,10 @@ export default function ActiveGame() {
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   const [displayTimeRemaining, setDisplayTimeRemaining] = useState<number>(0);
 
-  // Fetch run data from API
-  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '');
-  const { data: votingRoundResponse, isLoading: votingLoading } = useRuns.useGetCurrentVotingRound(runId || '');
-  const { data: tradesResponse } = useRuns.useGetRunTrades(runId || '');
+  const enableQueries = Boolean(runId);
+  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '', { enabled: enableQueries });
+  const { data: votingRoundResponse, isLoading: votingLoading } = useRuns.useGetCurrentVotingRound(runId || '', { enabled: enableQueries });
+  const { data: tradesResponse } = useRuns.useGetRunTrades(runId || '', { enabled: enableQueries });
   const castVoteMutation = useRuns.useCastVote();
 
   // Extract run data
@@ -57,8 +57,8 @@ export default function ActiveGame() {
 
   const marketSymbol = run?.coin ?? '';
   const { data: priceHistoryData, isLoading: isPriceLoading, error: priceError, dataUpdatedAt } = 
-    useMarket.useGetPriceHistory(marketSymbol);
-  const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol);
+    useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: enableQueries && Boolean(marketSymbol) });
+  const { data: currentPriceData } = useMarket.useGetCurrentPrice(marketSymbol, { enabled: enableQueries && Boolean(marketSymbol) });
 
   console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
 
@@ -86,10 +86,6 @@ export default function ActiveGame() {
         </div>
       </div>
     );
-  }
-
-  if (!runId) {
-    return <Navigate to="/dashboard" replace />;
   }
 
   if (run.status !== 'ACTIVE') {

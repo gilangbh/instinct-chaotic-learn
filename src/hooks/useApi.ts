@@ -118,12 +118,12 @@ export const useRuns = {
   },
 
   // Get run by ID
-  useGetRun: (id: string) => {
+  useGetRun: (id: string, options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['run', id],
       queryFn: () => api.runs.getById(id),
-      enabled: !!id,
-      refetchInterval: 5000, // Refetch every 5 seconds
+      enabled: options?.enabled ?? !!id,
+      refetchInterval: 5000,
     });
   },
 
@@ -137,21 +137,21 @@ export const useRuns = {
   },
 
   // Get run trades
-  useGetRunTrades: (id: string) => {
+  useGetRunTrades: (id: string, options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['run', id, 'trades'],
       queryFn: () => api.runs.getTrades(id),
-      enabled: !!id,
+      enabled: options?.enabled ?? !!id,
     });
   },
 
   // Get current voting round
-  useGetCurrentVotingRound: (id: string) => {
+  useGetCurrentVotingRound: (id: string, options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['run', id, 'voting-round'],
       queryFn: () => api.runs.getCurrentVotingRound(id),
-      enabled: !!id,
-      refetchInterval: 3000, // Refetch every 3 seconds
+      enabled: options?.enabled ?? !!id,
+      refetchInterval: 3000,
     });
   },
 
@@ -218,21 +218,21 @@ export const useRuns = {
 // Market data hooks
 export const useMarket = {
   // Get price history
-  useGetPriceHistory: (symbol: string, timeframe: string = '1h') => {
+  useGetPriceHistory: (symbol: string, timeframe: string = '1h', options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['market', 'price-history', symbol, timeframe],
       queryFn: () => api.market.getPriceHistory(symbol, timeframe),
-      enabled: !!symbol,
+      enabled: options?.enabled ?? !!symbol,
       refetchInterval: 60000, // Refetch every 1 minute
     });
   },
 
   // Get current price
-  useGetCurrentPrice: (symbol: string) => {
+  useGetCurrentPrice: (symbol: string, options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['market', 'price', symbol],
       queryFn: () => api.market.getCurrentPrice(symbol),
-      enabled: !!symbol,
+      enabled: options?.enabled ?? !!symbol,
       refetchInterval: 60000, // Refetch every 1 minute
     });
   },
