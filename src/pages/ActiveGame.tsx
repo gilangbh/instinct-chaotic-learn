@@ -137,12 +137,16 @@ export default function ActiveGame() {
       setDisplayTimeRemaining(remaining);
       
       // If time is up, invalidate queries to refresh data (backend should execute trade and create next round)
+      // Only invalidate once when timer expires, not continuously
       if (remaining <= 0) {
         clearInterval(timer);
         // Invalidate queries to trigger refresh - backend should have executed trade and created next round
-        queryClient.invalidateQueries({ queryKey: ['run', runId] });
-        queryClient.invalidateQueries({ queryKey: ['run', runId, 'voting-round'] });
-        queryClient.invalidateQueries({ queryKey: ['run', runId, 'trades'] });
+        // Use a small delay to ensure backend has processed the round
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['run', runId] });
+          queryClient.invalidateQueries({ queryKey: ['run', runId, 'voting-round'] });
+          queryClient.invalidateQueries({ queryKey: ['run', runId, 'trades'] });
+        }, 2000); // Wait 2 seconds for backend to process
       }
     }, 1000);
 

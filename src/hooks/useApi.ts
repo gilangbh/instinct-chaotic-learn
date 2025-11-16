@@ -119,12 +119,13 @@ export const useRuns = {
   },
 
   // Get run by ID
+  // Note: Reduced polling frequency since WebSocket handles vote updates in real-time
   useGetRun: (id: string, options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['run', id],
       queryFn: () => api.runs.getById(id),
       enabled: options?.enabled ?? !!id,
-      refetchInterval: 30000, // Refetch every 30 seconds (less aggressive)
+      refetchInterval: 60000, // Refetch every 60 seconds (backup sync, WebSocket handles real-time)
       refetchOnWindowFocus: true, // Refetch when user returns to tab
     });
   },
@@ -148,12 +149,13 @@ export const useRuns = {
   },
 
   // Get current voting round
+  // Note: With WebSocket, we don't need aggressive polling - WebSocket provides real-time vote updates
   useGetCurrentVotingRound: (id: string, options?: { enabled?: boolean }) => {
     return useQuery({
       queryKey: ['run', id, 'voting-round'],
       queryFn: () => api.runs.getCurrentVotingRound(id),
       enabled: options?.enabled ?? !!id,
-      refetchInterval: 15000, // Refetch every 15 seconds (countdown handled client-side)
+      refetchInterval: 60000, // Refetch every 60 seconds (backup sync, WebSocket handles real-time)
       refetchOnWindowFocus: true, // Refetch when user returns to tab
     });
   },
