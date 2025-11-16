@@ -105,12 +105,13 @@ export default function ActiveGame() {
   // Calculate remaining time from server timestamp to prevent reset on refresh
   useEffect(() => {
     if (!currentVotingRound || !run) {
+      setDisplayTimeRemaining(0);
       return;
     }
 
     const calculateRemainingTime = () => {
       // Try to calculate from startedAt timestamp (preferred method)
-      if (currentVotingRound.startedAt) {
+      if (currentVotingRound?.startedAt) {
         const votingIntervalSeconds = run.votingInterval * 60; // Convert minutes to seconds
         const startedAt = new Date(currentVotingRound.startedAt).getTime();
         const now = Date.now();
@@ -120,7 +121,7 @@ export default function ActiveGame() {
       }
       
       // Fallback to server-provided timeRemaining if startedAt is missing
-      if (currentVotingRound.timeRemaining != null && currentVotingRound.timeRemaining > 0) {
+      if (currentVotingRound?.timeRemaining != null && currentVotingRound.timeRemaining > 0) {
         return currentVotingRound.timeRemaining;
       }
       
@@ -398,7 +399,7 @@ export default function ActiveGame() {
                     <div className="text-2xl font-bold text-foreground">
                       ${currentPriceData?.success && currentPriceData.data 
                         ? currentPriceData.data.price.toFixed(2)
-                        : currentVotingRound.currentPrice}
+                        : currentVotingRound?.currentPrice || '0.00'}
                     </div>
                     {currentPriceData?.success && currentPriceData.data ? (
                       <div
@@ -411,18 +412,18 @@ export default function ActiveGame() {
                         {(currentPriceData.data.change24h || 0) >= 0 ? '+' : ''}
                         {(currentPriceData.data.change24h || 0).toFixed(2)}% 24h
                       </div>
-                    ) : (
+                    ) : currentVotingRound ? (
                       <div
                         className={`text-sm ${
-                          currentVotingRound.priceChange24h >= 0
+                          (currentVotingRound.priceChange24h ?? 0) >= 0
                             ? 'text-success'
                             : 'text-destructive'
                         }`}
                       >
-                        {currentVotingRound.priceChange24h >= 0 ? '+' : ''}
-                        {currentVotingRound.priceChange24h}% 24h
+                        {(currentVotingRound.priceChange24h ?? 0) >= 0 ? '+' : ''}
+                        {currentVotingRound.priceChange24h ?? 0}% 24h
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </CardHeader>
@@ -574,25 +575,45 @@ export default function ActiveGame() {
           {/* Right Column - Voting Interface */}
           <div className="space-y-4">
             {/* Countdown Timer */}
-            <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-              <CardContent className="p-6">
-                <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    Time to Vote
+            {currentVotingRound ? (
+              <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Time to Vote
+                    </div>
+                    <div className="text-5xl font-mono font-bold text-primary mb-2">
+                      {formatTime(displayTimeRemaining)}
+                    </div>
+                    <Progress
+                      value={(displayTimeRemaining / (run.votingInterval * 60)) * 100}
+                      className="h-2"
+                    />
                   </div>
-                  <div className="text-5xl font-mono font-bold text-primary mb-2">
-                    {formatTime(displayTimeRemaining)}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      Round Status
+                    </div>
+                    <div className="text-2xl font-bold text-primary mb-2">
+                      ⏳ Waiting for Next Round
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Trade execution in progress...
+                    </div>
                   </div>
-                  <Progress
-                    value={(displayTimeRemaining / (run.votingInterval * 60)) * 100}
-                    className="h-2"
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             {/* This Round's Strategy */}
+            {currentVotingRound ? (
             <Card className="card-elevated">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-foreground">
@@ -607,23 +628,23 @@ export default function ActiveGame() {
                       Leverage
                     </span>
                     <span className="text-2xl font-bold text-warning">
-                      {(() => {
-                        // Backend stores as tenths (e.g., 153 = 15.3x), convert back
-                        // Handle both old format (direct values 1-20) and new format (tenths 10-200)
-                        const rawLeverage = typeof currentVotingRound.leverage === 'number'
-                          ? currentVotingRound.leverage
-                          : parseFloat(String(currentVotingRound.leverage)) || 10;
-                        
-                        // New format: values >= 10 are stored as tenths (10 = 1.0x, 200 = 20.0x)
-                        // Old format: values 1-20 are direct (1 = 1.0x, 20 = 20.0x)
-                        // If value is >= 10, divide by 10; otherwise use as-is
-                        let leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
-                        
-                        // Ensure it's within valid range (1-20x) - clamp if out of range
-                        leverage = Math.max(1, Math.min(20, leverage));
-                        
-                        return leverage.toFixed(1);
-                      })()}x
+                        {(() => {
+                          // Backend stores as tenths (e.g., 153 = 15.3x), convert back
+                          // Handle both old format (direct values 1-20) and new format (tenths 10-200)
+                          const rawLeverage = typeof currentVotingRound.leverage === 'number'
+                            ? currentVotingRound.leverage
+                            : parseFloat(String(currentVotingRound.leverage)) || 10;
+                          
+                          // New format: values >= 10 are stored as tenths (10 = 1.0x, 200 = 20.0x)
+                          // Old format: values 1-20 are direct (1 = 1.0x, 20 = 20.0x)
+                          // If value is >= 10, divide by 10; otherwise use as-is
+                          let leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
+                          
+                          // Ensure it's within valid range (1-20x) - clamp if out of range
+                          leverage = Math.max(1, Math.min(20, leverage));
+                          
+                          return leverage.toFixed(1);
+                        })()}x
                     </span>
                   </div>
                 </div>
@@ -635,23 +656,23 @@ export default function ActiveGame() {
                       Position Size
                     </span>
                     <span className="text-2xl font-bold text-secondary">
-                      {(() => {
-                        // Backend stores as tenths (e.g., 457 = 45.7%), convert back
-                        // Handle both old format (direct values 10-100) and new format (tenths 100-1000)
-                        const rawPositionSize = typeof currentVotingRound.positionSize === 'number'
-                          ? currentVotingRound.positionSize
-                          : parseFloat(String(currentVotingRound.positionSize)) || 100;
-                        
-                        // New format: values >= 100 are stored as tenths (100 = 10.0%, 1000 = 100.0%)
-                        // Old format: values 10-100 are direct (10 = 10.0%, 100 = 100.0%)
-                        // If value is >= 100, divide by 10; otherwise use as-is
-                        let positionSize = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
-                        
-                        // Ensure it's within valid range (10-100%) - clamp if out of range
-                        positionSize = Math.max(10, Math.min(100, positionSize));
-                        
-                        return positionSize.toFixed(1);
-                      })()}%
+                        {(() => {
+                          // Backend stores as tenths (e.g., 457 = 45.7%), convert back
+                          // Handle both old format (direct values 10-100) and new format (tenths 100-1000)
+                          const rawPositionSize = typeof currentVotingRound.positionSize === 'number'
+                            ? currentVotingRound.positionSize
+                            : parseFloat(String(currentVotingRound.positionSize)) || 100;
+                          
+                          // New format: values >= 100 are stored as tenths (100 = 10.0%, 1000 = 100.0%)
+                          // Old format: values 10-100 are direct (10 = 10.0%, 100 = 100.0%)
+                          // If value is >= 100, divide by 10; otherwise use as-is
+                          let positionSize = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
+                          
+                          // Ensure it's within valid range (10-100%) - clamp if out of range
+                          positionSize = Math.max(10, Math.min(100, positionSize));
+                          
+                          return positionSize.toFixed(1);
+                        })()}%
                     </span>
                   </div>
                 </div>
@@ -661,37 +682,57 @@ export default function ActiveGame() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Voting Buttons */}
-            <Card className="card-elevated">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
-                  {isWsConnected && (
-                    <Badge variant="outline" className="text-xs">
-                      🔴 Live
-                    </Badge>
-                  )}
-                </div>
-                {/* Real-time vote counts from WebSocket */}
-                {voteUpdate && voteUpdate.runId === runId && voteUpdate.round === currentVotingRound?.round && (
-                  <div className="mt-3 flex items-center justify-around gap-2 text-sm">
-                    <div className="flex items-center gap-1">
-                      <span className="text-success">📈 LONG:</span>
-                      <span className="font-bold">{voteUpdate.voteDistribution.long}</span>
+            ) : (
+              <Card className="card-elevated">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2 text-foreground">
+                    ⏳ Waiting for Next Round
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-4">
+                    <div className="text-muted-foreground mb-2">
+                      The previous voting round has ended.
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-destructive">📉 SHORT:</span>
-                      <span className="font-bold">{voteUpdate.voteDistribution.short}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">⏭️ SKIP:</span>
-                      <span className="font-bold">{voteUpdate.voteDistribution.skip}</span>
+                    <div className="text-sm text-muted-foreground">
+                      The trade is being executed and the next round will start shortly...
                     </div>
                   </div>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-3">
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Voting Buttons */}
+            {currentVotingRound ? (
+              <Card className="card-elevated">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
+                    {isWsConnected && (
+                      <Badge variant="outline" className="text-xs">
+                        🔴 Live
+                      </Badge>
+                    )}
+                  </div>
+                  {/* Real-time vote counts from WebSocket */}
+                  {voteUpdate && voteUpdate.runId === runId && voteUpdate.round === currentVotingRound?.round && (
+                    <div className="mt-3 flex items-center justify-around gap-2 text-sm">
+                      <div className="flex items-center gap-1">
+                        <span className="text-success">📈 LONG:</span>
+                        <span className="font-bold">{voteUpdate.voteDistribution.long}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-destructive">📉 SHORT:</span>
+                        <span className="font-bold">{voteUpdate.voteDistribution.short}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground">⏭️ SKIP:</span>
+                        <span className="font-bold">{voteUpdate.voteDistribution.skip}</span>
+                      </div>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-3">
                 <Button
                   className={`w-full h-20 text-lg font-bold shadow-soft-sm text-white transition-colors ${
                     userVote === 'long'
@@ -765,6 +806,23 @@ export default function ActiveGame() {
                 )}
               </CardContent>
             </Card>
+            ) : (
+              <Card className="card-elevated">
+                <CardHeader>
+                  <CardTitle className="text-lg text-foreground">⏸️ Voting Closed</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-4">
+                    <div className="text-muted-foreground mb-2">
+                      This voting round has ended.
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      The trade is being executed. The next round will start automatically.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Participants */}
             <Card className="card-elevated">
