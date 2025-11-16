@@ -11,6 +11,7 @@ import {
 } from '@/lib/mockData';
 import { useMarket, useRuns } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUp,
   ArrowDown,
@@ -41,6 +42,7 @@ export default function ActiveGame() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   const [displayTimeRemaining, setDisplayTimeRemaining] = useState<number>(0);
@@ -123,16 +125,28 @@ export default function ActiveGame() {
       const remaining = calculateRemainingTime();
       setDisplayTimeRemaining(remaining);
       
-      // If time is up, the backend should have closed the round
+      // If time is up, invalidate queries to refresh data (backend should execute trade and create next round)
       if (remaining <= 0) {
         clearInterval(timer);
+        // Invalidate queries to trigger refresh - backend should have executed trade and created next round
+        queryClient.invalidateQueries({ queryKey: ['run', runId] });
+        queryClient.invalidateQueries({ queryKey: ['run', runId, 'voting-round'] });
+        queryClient.invalidateQueries({ queryKey: ['run', runId, 'trades'] });
       }
     }, 1000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [currentVotingRound?.startedAt, currentVotingRound?.timeRemaining, currentVotingRound?.round, run?.votingInterval, run?.id]);
+  }, [currentVotingRound?.startedAt, currentVotingRound?.timeRemaining, currentVotingRound?.round, run?.votingInterval, run?.id, runId, queryClient]);
+
+  // Reset userVote when round changes (new round = can vote again)
+  useEffect(() => {
+    if (currentVotingRound?.round) {
+      // Reset vote state when round changes
+      setUserVote(null);
+    }
+  }, [currentVotingRound?.round]);
 
   useEffect(() => {
     if (!run) {
@@ -199,6 +213,12 @@ export default function ActiveGame() {
 
   const lastTrade = trades[trades.length - 1];
 
+  // Check if user has already voted in this round
+  const hasUserVoted = userVote !== null;
+  
+  // Also check if timer has expired (disable voting if time is up)
+  const isVotingClosed = displayTimeRemaining <= 0;
+
   const handleVote = async (vote: 'long' | 'short' | 'skip') => {
     if (!currentVotingRound) {
       toast.error('No active voting round');
@@ -207,6 +227,16 @@ export default function ActiveGame() {
 
     if (!runId) {
       toast.error('Run ID is missing');
+      return;
+    }
+
+    if (hasUserVoted) {
+      toast.error('You have already voted in this round');
+      return;
+    }
+
+    if (isVotingClosed) {
+      toast.error('Voting time has expired');
       return;
     }
 
@@ -225,11 +255,17 @@ export default function ActiveGame() {
       // Success toast is shown by mutation hook
     } catch (error: any) {
       console.error('Vote error:', error);
-      setUserVote(null);
       
-      // Show specific error message
-      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to cast vote';
-      toast.error(errorMessage);
+      // If user already voted (409), keep the vote state
+      if (error?.response?.status === 409) {
+        const errorMessage = error?.response?.data?.error || error?.message || 'You have already voted';
+        toast.error(errorMessage);
+        // Don't reset userVote - user has already voted
+      } else {
+        setUserVote(null);
+        const errorMessage = error?.response?.data?.error || error?.message || 'Failed to cast vote';
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -624,7 +660,7 @@ export default function ActiveGame() {
                       : 'bg-[hsl(var(--success))]/80 hover:bg-[hsl(var(--success))]'
                   }`}
                   onClick={() => handleVote('long')}
-                  disabled={userVote !== null}
+                  disabled={hasUserVoted || isVotingClosed}
                 >
                   <div className="flex items-center gap-3">
                     <ArrowUp className="w-6 h-6" />
@@ -645,7 +681,7 @@ export default function ActiveGame() {
                       : 'bg-[hsl(var(--destructive))]/80 hover:bg-[hsl(var(--destructive))]'
                   }`}
                   onClick={() => handleVote('short')}
-                  disabled={userVote !== null}
+                  disabled={hasUserVoted || isVotingClosed}
                 >
                   <div className="flex items-center gap-3">
                     <ArrowDown className="w-6 h-6" />
@@ -667,7 +703,7 @@ export default function ActiveGame() {
                       : ''
                   }`}
                   onClick={() => handleVote('skip')}
-                  disabled={userVote !== null}
+                  disabled={hasUserVoted || isVotingClosed}
                 >
                   <div className="flex items-center gap-3">
                     <SkipForward className="w-5 h-5" />
@@ -696,7 +732,7 @@ export default function ActiveGame() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-foreground">
                   <Users className="w-5 h-5" />
-                  Players ({run.participantCount})
+                  Players ({run.participants?.length || run.participantCount || 0})
                 </CardTitle>
               </CardHeader>
               <CardContent>
