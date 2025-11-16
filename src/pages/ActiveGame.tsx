@@ -91,21 +91,32 @@ export default function ActiveGame() {
 
   // Calculate remaining time from server timestamp to prevent reset on refresh
   useEffect(() => {
-    if (!currentVotingRound?.startedAt || !run) {
+    if (!currentVotingRound || !run) {
       return;
     }
 
     const calculateRemainingTime = () => {
-      const votingIntervalSeconds = run.votingInterval * 60; // Convert minutes to seconds
-      const startedAt = new Date(currentVotingRound.startedAt).getTime();
-      const now = Date.now();
-      const elapsed = Math.floor((now - startedAt) / 1000);
-      const remaining = Math.max(0, votingIntervalSeconds - elapsed);
-      return remaining;
+      // Try to calculate from startedAt timestamp (preferred method)
+      if (currentVotingRound.startedAt) {
+        const votingIntervalSeconds = run.votingInterval * 60; // Convert minutes to seconds
+        const startedAt = new Date(currentVotingRound.startedAt).getTime();
+        const now = Date.now();
+        const elapsed = Math.floor((now - startedAt) / 1000);
+        const remaining = Math.max(0, votingIntervalSeconds - elapsed);
+        return remaining;
+      }
+      
+      // Fallback to server-provided timeRemaining if startedAt is missing
+      if (currentVotingRound.timeRemaining != null && currentVotingRound.timeRemaining > 0) {
+        return currentVotingRound.timeRemaining;
+      }
+      
+      return 0;
     };
 
     // Set initial time
-    setDisplayTimeRemaining(calculateRemainingTime());
+    const initialTime = calculateRemainingTime();
+    setDisplayTimeRemaining(initialTime);
 
     // Update every second
     const timer = window.setInterval(() => {
@@ -121,7 +132,7 @@ export default function ActiveGame() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [currentVotingRound?.startedAt, currentVotingRound?.round, run?.votingInterval, run?.id]);
+  }, [currentVotingRound?.startedAt, currentVotingRound?.timeRemaining, currentVotingRound?.round, run?.votingInterval, run?.id]);
 
   useEffect(() => {
     if (!run) {
@@ -547,9 +558,19 @@ export default function ActiveGame() {
                     <span className="text-2xl font-bold text-warning">
                       {(() => {
                         // Backend stores as tenths (e.g., 153 = 15.3x), convert back
-                        const leverage = typeof currentVotingRound.leverage === 'number'
-                          ? currentVotingRound.leverage / 10
-                          : parseFloat(currentVotingRound.leverage) / 10;
+                        // Handle both old format (direct values 1-20) and new format (tenths 10-200)
+                        const rawLeverage = typeof currentVotingRound.leverage === 'number'
+                          ? currentVotingRound.leverage
+                          : parseFloat(String(currentVotingRound.leverage)) || 10;
+                        
+                        // New format: values >= 10 are stored as tenths (10 = 1.0x, 200 = 20.0x)
+                        // Old format: values 1-20 are direct (1 = 1.0x, 20 = 20.0x)
+                        // If value is >= 10, divide by 10; otherwise use as-is
+                        let leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
+                        
+                        // Ensure it's within valid range (1-20x) - clamp if out of range
+                        leverage = Math.max(1, Math.min(20, leverage));
+                        
                         return leverage.toFixed(1);
                       })()}x
                     </span>
@@ -565,9 +586,19 @@ export default function ActiveGame() {
                     <span className="text-2xl font-bold text-secondary">
                       {(() => {
                         // Backend stores as tenths (e.g., 457 = 45.7%), convert back
-                        const positionSize = typeof currentVotingRound.positionSize === 'number'
-                          ? currentVotingRound.positionSize / 10
-                          : parseFloat(currentVotingRound.positionSize) / 10;
+                        // Handle both old format (direct values 10-100) and new format (tenths 100-1000)
+                        const rawPositionSize = typeof currentVotingRound.positionSize === 'number'
+                          ? currentVotingRound.positionSize
+                          : parseFloat(String(currentVotingRound.positionSize)) || 100;
+                        
+                        // New format: values >= 100 are stored as tenths (100 = 10.0%, 1000 = 100.0%)
+                        // Old format: values 10-100 are direct (10 = 10.0%, 100 = 100.0%)
+                        // If value is >= 100, divide by 10; otherwise use as-is
+                        let positionSize = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
+                        
+                        // Ensure it's within valid range (10-100%) - clamp if out of range
+                        positionSize = Math.max(10, Math.min(100, positionSize));
+                        
                         return positionSize.toFixed(1);
                       })()}%
                     </span>
