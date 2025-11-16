@@ -94,8 +94,25 @@ export default function Dashboard() {
     : '0.0';
   const isProfit = profitLoss >= 0;
 
-  const progress = isActive
-    ? (displayRun.currentRound / displayRun.totalRounds) * 100
+  // Calculate current round from voting rounds if available, otherwise use currentRound field
+  const calculateCurrentRound = () => {
+    if (displayRun.votingRounds && displayRun.votingRounds.length > 0) {
+      // Find the highest round number that's OPEN or EXECUTING
+      const openRound = displayRun.votingRounds.find((r: any) => r.status === 'OPEN');
+      if (openRound) {
+        return openRound.round;
+      }
+      // If no open round, find the highest completed round
+      const maxRound = Math.max(...displayRun.votingRounds.map((r: any) => r.round || 0));
+      return maxRound;
+    }
+    // Fallback: use currentRound field, default to 1 if 0 or undefined
+    return displayRun.currentRound && displayRun.currentRound > 0 ? displayRun.currentRound : (isActive ? 1 : 0);
+  };
+
+  const currentRound = calculateCurrentRound();
+  const progress = isActive && displayRun.totalRounds > 0
+    ? (currentRound / displayRun.totalRounds) * 100
     : 0;
 
   return (
@@ -265,7 +282,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Progress</span>
                     <span className="font-medium text-foreground">
-                      Round {displayRun.currentRound} / {displayRun.totalRounds}
+                      Round {currentRound} / {displayRun.totalRounds}
                     </span>
                   </div>
                   <Progress value={progress} className="h-2" />
