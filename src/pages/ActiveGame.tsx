@@ -89,25 +89,39 @@ export default function ActiveGame() {
     }
   }, [priceHistoryQuery.dataUpdatedAt]);
 
+  // Calculate remaining time from server timestamp to prevent reset on refresh
   useEffect(() => {
-    if (currentVotingRound?.timeRemaining != null) {
-      setDisplayTimeRemaining(currentVotingRound.timeRemaining);
-    }
-  }, [currentVotingRound?.round, currentVotingRound?.timeRemaining]);
-
-  useEffect(() => {
-    if (!run || shouldRedirect) {
+    if (!currentVotingRound?.startedAt || !run) {
       return;
     }
 
+    const calculateRemainingTime = () => {
+      const votingIntervalSeconds = run.votingInterval * 60; // Convert minutes to seconds
+      const startedAt = new Date(currentVotingRound.startedAt).getTime();
+      const now = Date.now();
+      const elapsed = Math.floor((now - startedAt) / 1000);
+      const remaining = Math.max(0, votingIntervalSeconds - elapsed);
+      return remaining;
+    };
+
+    // Set initial time
+    setDisplayTimeRemaining(calculateRemainingTime());
+
+    // Update every second
     const timer = window.setInterval(() => {
-      setDisplayTimeRemaining((prev) => (prev > 0 ? prev - 1 : 0));
+      const remaining = calculateRemainingTime();
+      setDisplayTimeRemaining(remaining);
+      
+      // If time is up, the backend should have closed the round
+      if (remaining <= 0) {
+        clearInterval(timer);
+      }
     }, 1000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [run?.id, shouldRedirect]);
+  }, [currentVotingRound?.startedAt, currentVotingRound?.round, run?.votingInterval, run?.id]);
 
   useEffect(() => {
     if (!run) {
@@ -180,23 +194,31 @@ export default function ActiveGame() {
       return;
     }
 
+    if (!runId) {
+      toast.error('Run ID is missing');
+      return;
+    }
+
     try {
       setUserVote(vote);
+      
+      const voteChoice = vote.toUpperCase();
+      console.log('Casting vote:', { runId, round: currentVotingRound.round, choice: voteChoice });
+      
       await castVoteMutation.mutateAsync({
         id: runId,
         round: currentVotingRound.round,
-        choice: vote.toUpperCase(),
+        choice: voteChoice,
       });
 
-      const voteLabels = {
-        long: 'BUY 📈',
-        short: 'SELL 📉',
-        skip: 'SKIP ⏭️',
-      };
-      // Toast shown by mutation hook
-    } catch (error) {
+      // Success toast is shown by mutation hook
+    } catch (error: any) {
+      console.error('Vote error:', error);
       setUserVote(null);
-      // Error toast shown by mutation hook
+      
+      // Show specific error message
+      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to cast vote';
+      toast.error(errorMessage);
     }
   };
 
@@ -523,7 +545,13 @@ export default function ActiveGame() {
                       Leverage
                     </span>
                     <span className="text-2xl font-bold text-warning">
-                      {currentVotingRound.leverage}x
+                      {(() => {
+                        // Backend stores as tenths (e.g., 153 = 15.3x), convert back
+                        const leverage = typeof currentVotingRound.leverage === 'number'
+                          ? currentVotingRound.leverage / 10
+                          : parseFloat(currentVotingRound.leverage) / 10;
+                        return leverage.toFixed(1);
+                      })()}x
                     </span>
                   </div>
                 </div>
@@ -535,7 +563,13 @@ export default function ActiveGame() {
                       Position Size
                     </span>
                     <span className="text-2xl font-bold text-secondary">
-                      {currentVotingRound.positionSize}%
+                      {(() => {
+                        // Backend stores as tenths (e.g., 457 = 45.7%), convert back
+                        const positionSize = typeof currentVotingRound.positionSize === 'number'
+                          ? currentVotingRound.positionSize / 10
+                          : parseFloat(currentVotingRound.positionSize) / 10;
+                        return positionSize.toFixed(1);
+                      })()}%
                     </span>
                   </div>
                 </div>
