@@ -12,6 +12,7 @@ import {
 import { useMarket, useRuns } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
+import { useVoteWebSocket } from '@/hooks/useVoteWebSocket';
 import {
   ArrowUp,
   ArrowDown,
@@ -54,6 +55,9 @@ export default function ActiveGame() {
   const votingRoundQuery = useRuns.useGetCurrentVotingRound(runId || '', { enabled: enableQueries });
   const tradesQuery = useRuns.useGetRunTrades(runId || '', { enabled: enableQueries });
   const castVoteMutation = useRuns.useCastVote();
+  
+  // WebSocket for real-time vote updates
+  const { voteUpdate, isConnected: isWsConnected } = useVoteWebSocket(runId);
 
   // Extract run data first before using it
   const run = runQuery.data?.data;
@@ -90,6 +94,13 @@ export default function ActiveGame() {
       setLastUpdateTime(new Date(dataUpdatedAt));
     }
   }, [priceHistoryQuery.dataUpdatedAt]);
+
+  // Use WebSocket vote update for time remaining if available
+  useEffect(() => {
+    if (voteUpdate && voteUpdate.runId === runId && voteUpdate.round === currentVotingRound?.round) {
+      setDisplayTimeRemaining(voteUpdate.timeRemaining);
+    }
+  }, [voteUpdate, runId, currentVotingRound?.round]);
 
   // Calculate remaining time from server timestamp to prevent reset on refresh
   useEffect(() => {
@@ -650,7 +661,31 @@ export default function ActiveGame() {
             {/* Voting Buttons */}
             <Card className="card-elevated">
               <CardHeader>
-                <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
+                  {isWsConnected && (
+                    <Badge variant="outline" className="text-xs">
+                      🔴 Live
+                    </Badge>
+                  )}
+                </div>
+                {/* Real-time vote counts from WebSocket */}
+                {voteUpdate && voteUpdate.runId === runId && voteUpdate.round === currentVotingRound?.round && (
+                  <div className="mt-3 flex items-center justify-around gap-2 text-sm">
+                    <div className="flex items-center gap-1">
+                      <span className="text-success">📈 LONG:</span>
+                      <span className="font-bold">{voteUpdate.voteDistribution.long}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-destructive">📉 SHORT:</span>
+                      <span className="font-bold">{voteUpdate.voteDistribution.short}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">⏭️ SKIP:</span>
+                      <span className="font-bold">{voteUpdate.voteDistribution.skip}</span>
+                    </div>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button

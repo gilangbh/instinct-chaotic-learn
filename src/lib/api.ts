@@ -1,7 +1,21 @@
 // API Service Layer for Instinct.fi
 import { User, Run, Badge, VoteChoice, CreateUserRequest, JoinRunRequest, CastVoteRequest } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+const normalizeApiBaseUrl = (value?: string): string => {
+  const fallback = 'http://localhost:3001/api/v1';
+  if (!value) {
+    return fallback;
+  }
+
+  const trimmed = value.replace(/\/+$/, '');
+  if (trimmed.includes('/api/')) {
+    return trimmed;
+  }
+
+  return `${trimmed}/api/v1`;
+};
+
+const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
 // API Response wrapper
 interface ApiResponse<T> {

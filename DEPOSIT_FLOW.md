@@ -128,3 +128,12 @@ Even though trades happen via a "single community wallet" (Drift), using per-run
 **Your architecture is correct! The deposit dialog just needs the right USDC mint.** 🎉
 
 
+
+
+
+
+
+
+
+
+
