@@ -37,13 +37,16 @@ import {
 } from 'recharts';
 
 export default function ActiveGame() {
+  // ALL HOOKS MUST BE CALLED FIRST, IN THE SAME ORDER EVERY RENDER
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
   const { user } = useAuth();
   const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
   const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
   const [displayTimeRemaining, setDisplayTimeRemaining] = useState<number>(0);
+  const redirectToastShown = useRef(false);
 
+  // Always call these hooks, even if runId is undefined
   const enableQueries = Boolean(runId);
   const runQuery = useRuns.useGetRun(runId || '', { enabled: enableQueries });
   const votingRoundQuery = useRuns.useGetCurrentVotingRound(runId || '', { enabled: enableQueries });
@@ -55,7 +58,7 @@ export default function ActiveGame() {
   const currentVotingRound = votingRoundQuery.data?.data;
   const trades = tradesQuery.data?.data || [];
 
-  // Now we can safely use run for market queries
+  // Now we can safely use run for market queries - always call these hooks
   const marketSymbol = run?.coin ?? run?.tradingPair?.split('/')[0] ?? '';
   const marketSymbolEnabled = enableQueries && Boolean(marketSymbol);
   const priceHistoryQuery = useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: marketSymbolEnabled });
@@ -78,15 +81,8 @@ export default function ActiveGame() {
 
   const userDepositCents = userParticipation?.depositAmount ?? 0;
 
-  console.debug('ActiveGame render', { 
-    runId, 
-    runStatus: run?.status, 
-    runLoading: runQuery.isLoading, 
-    votingLoading: votingRoundQuery.isLoading 
-  });
-  const redirectToastShown = useRef(false);
-
-  useMemo(() => {
+  // useEffect hooks - must be called after all useState/useRef/useQuery hooks
+  useEffect(() => {
     const dataUpdatedAt = priceHistoryQuery.dataUpdatedAt;
     if (dataUpdatedAt) {
       setLastUpdateTime(new Date(dataUpdatedAt));
@@ -129,6 +125,31 @@ export default function ActiveGame() {
     }
   }, [run, shouldRedirect]);
 
+  // Format chart data - useMemo must be called before any early returns
+  const priceHistoryData = priceHistoryQuery.data;
+  const currentPriceData = currentPriceQuery.data;
+
+  const chartData = useMemo(() => {
+    try {
+      if (priceHistoryData?.success && priceHistoryData.data) {
+        const priceData = priceHistoryData.data;
+        // Assuming the API returns an array of price objects with timestamp and price
+        return priceData.slice(-60).map((d: any) => ({
+          time: new Date(d.timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          price: parseFloat(d.price) || 0,
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.error('Error formatting chart data:', error);
+      return [];
+    }
+  }, [priceHistoryData]);
+
+  // NOW we can do conditional logic and early returns (after all hooks)
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
@@ -144,6 +165,7 @@ export default function ActiveGame() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  // Safe to access run properties now (after loading/redirect checks)
   const profitLoss = run.totalPool - run.startingPool;
   const profitLossPercent = run.startingPool > 0 
     ? ((profitLoss / run.startingPool) * 100).toFixed(1)
@@ -177,30 +199,6 @@ export default function ActiveGame() {
       // Error toast shown by mutation hook
     }
   };
-
-  // Format chart data - use real data if available
-  const priceHistoryData = priceHistoryQuery.data;
-  const currentPriceData = currentPriceQuery.data;
-
-  const chartData = useMemo(() => {
-    try {
-      if (priceHistoryData?.success && priceHistoryData.data) {
-        const priceData = priceHistoryData.data;
-        // Assuming the API returns an array of price objects with timestamp and price
-        return priceData.slice(-60).map((d: any) => ({
-          time: new Date(d.timestamp).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          price: parseFloat(d.price) || 0,
-        }));
-      }
-      return [];
-    } catch (error) {
-      console.error('Error formatting chart data:', error);
-      return [];
-    }
-  }, [priceHistoryData]);
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
