@@ -50,14 +50,16 @@ export default function ActiveGame() {
   const tradesQuery = useRuns.useGetRunTrades(runId || '', { enabled: enableQueries });
   const castVoteMutation = useRuns.useCastVote();
 
-  const marketSymbol = run?.coin ?? '';
-  const marketSymbolEnabled = enableQueries && Boolean(marketSymbol);
-  const priceHistoryQuery = useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: marketSymbolEnabled });
-  const currentPriceQuery = useMarket.useGetCurrentPrice(marketSymbol, { enabled: marketSymbolEnabled });
-
+  // Extract run data first before using it
   const run = runQuery.data?.data;
   const currentVotingRound = votingRoundQuery.data?.data;
   const trades = tradesQuery.data?.data || [];
+
+  // Now we can safely use run for market queries
+  const marketSymbol = run?.coin ?? run?.tradingPair?.split('/')[0] ?? '';
+  const marketSymbolEnabled = enableQueries && Boolean(marketSymbol);
+  const priceHistoryQuery = useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: marketSymbolEnabled });
+  const currentPriceQuery = useMarket.useGetCurrentPrice(marketSymbol, { enabled: marketSymbolEnabled });
 
   const isLoading = runQuery.isLoading || runQuery.isFetching || votingRoundQuery.isLoading || votingRoundQuery.isFetching || !run;
   const shouldRedirect = Boolean(run) && run.status !== 'ACTIVE';
@@ -76,7 +78,12 @@ export default function ActiveGame() {
 
   const userDepositCents = userParticipation?.depositAmount ?? 0;
 
-  console.debug('ActiveGame render', { runId, runStatus: run?.status, runLoading, votingLoading });
+  console.debug('ActiveGame render', { 
+    runId, 
+    runStatus: run?.status, 
+    runLoading: runQuery.isLoading, 
+    votingLoading: votingRoundQuery.isLoading 
+  });
   const redirectToastShown = useRef(false);
 
   useMemo(() => {
