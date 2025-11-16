@@ -105,7 +105,8 @@ export const useRuns = {
     return useQuery({
       queryKey: ['runs', 'active'],
       queryFn: () => api.runs.getActive(),
-      refetchInterval: 10000, // Refetch every 10 seconds to avoid rate limiting
+      refetchInterval: 30000, // Refetch every 30 seconds (less aggressive)
+      refetchOnWindowFocus: true, // Refetch when user returns to tab
     });
   },
 
@@ -123,7 +124,8 @@ export const useRuns = {
       queryKey: ['run', id],
       queryFn: () => api.runs.getById(id),
       enabled: options?.enabled ?? !!id,
-      refetchInterval: 10000, // Refetch every 10 seconds to avoid rate limiting
+      refetchInterval: 30000, // Refetch every 30 seconds (less aggressive)
+      refetchOnWindowFocus: true, // Refetch when user returns to tab
     });
   },
 
@@ -151,7 +153,8 @@ export const useRuns = {
       queryKey: ['run', id, 'voting-round'],
       queryFn: () => api.runs.getCurrentVotingRound(id),
       enabled: options?.enabled ?? !!id,
-      refetchInterval: 5000, // Refetch every 5 seconds (voting needs more frequent updates)
+      refetchInterval: 15000, // Refetch every 15 seconds (countdown handled client-side)
+      refetchOnWindowFocus: true, // Refetch when user returns to tab
     });
   },
 
