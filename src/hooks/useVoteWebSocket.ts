@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface VoteDistribution {
   long: number;
@@ -32,10 +33,11 @@ const getWebSocketUrl = (): string => {
 };
 
 /**
- * Hook to subscribe to real-time vote updates via WebSocket for a specific run
+ * Hook to subscribe to real-time vote updates and trade updates via WebSocket for a specific run
  */
 export const useVoteWebSocket = (runId: string | undefined) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [voteUpdate, setVoteUpdate] = useState<VoteUpdate | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -93,6 +95,21 @@ export const useVoteWebSocket = (runId: string | undefined) => {
                 setVoteUpdate(message.data as VoteUpdate);
               }
               break;
+            case 'TRADE_UPDATE':
+              if (message.data.runId === runId) {
+                console.log('[WebSocket] Trade update received:', message.data.trade);
+                // Invalidate trades query to refresh the data
+                queryClient.invalidateQueries({ queryKey: ['run', runId, 'trades'] });
+                // Also invalidate run query to update total pool
+                queryClient.invalidateQueries({ queryKey: ['run', runId] });
+              }
+              break;
+            case 'PRICE_UPDATE':
+              // Price updates are broadcast to all clients
+              // We can optionally use this to update prices in real-time
+              // For now, we'll just ignore it since we're already polling via API
+              // No need to log - it's expected
+              break;
             case 'PONG':
               // Heartbeat response
               break;
@@ -100,7 +117,10 @@ export const useVoteWebSocket = (runId: string | undefined) => {
               console.error('[WebSocket] Error:', message.data.error);
               break;
             default:
-              console.log('[WebSocket] Unknown message type:', message.type);
+              // Only log truly unknown message types
+              if (!['PRICE_UPDATE', 'RUN_UPDATE', 'CHAT_MESSAGE'].includes(message.type)) {
+                console.log('[WebSocket] Unknown message type:', message.type);
+              }
           }
         } catch (error) {
           console.error('[WebSocket] Error parsing message:', error);
@@ -179,4 +199,5 @@ export const useVoteWebSocket = (runId: string | undefined) => {
     reconnect: connect,
   };
 };
+
 

@@ -73,13 +73,13 @@ export default function ActiveGame() {
   const isLoading = runQuery.isLoading || runQuery.isFetching || votingRoundQuery.isLoading || votingRoundQuery.isFetching || !run;
   const shouldRedirect = Boolean(run) && run.status !== 'ACTIVE';
 
-  const totalPoolFromParticipants =
-    run?.participants?.reduce((sum: number, participant: any) => {
-      return sum + (participant.depositAmount || 0);
-    }, 0) ?? 0;
-
-  const totalPoolCents =
-    totalPoolFromParticipants > 0 ? totalPoolFromParticipants : run?.totalPool ?? 0;
+  // For active runs, use run.totalPool (includes PnL from trades)
+  // For waiting runs, use sum of participant deposits
+  const totalPoolCents = run?.status === 'ACTIVE' 
+    ? Math.max(0, run?.totalPool ?? 0) // Clamp to 0 minimum
+    : (run?.participants?.reduce((sum: number, participant: any) => {
+        return sum + (participant.depositAmount || 0);
+      }, 0) ?? 0);
 
   const userParticipation = run?.participants?.find(
     (p: any) => p.userId === user?.id || p.user?.id === user?.id
@@ -227,7 +227,17 @@ export default function ActiveGame() {
     : '0.0';
   const isProfit = profitLoss >= 0;
 
-  const lastTrade = trades[trades.length - 1];
+  const lastTrade = trades.length > 0 ? trades[trades.length - 1] : null;
+  
+  // Get vote distribution for last trade from the corresponding voting round
+  const lastTradeVotingRound = lastTrade ? run?.votingRounds?.find(
+    (vr: any) => vr.round === lastTrade.round
+  ) : null;
+  const lastTradeVoteDistribution = lastTradeVotingRound?.voteDistribution as {
+    long?: number;
+    short?: number;
+    skip?: number;
+  } | null;
 
   // Check if user has already voted in this round
   const hasUserVoted = userVote !== null;
@@ -305,7 +315,22 @@ export default function ActiveGame() {
           <div className="text-right">
             <div className="text-sm text-muted-foreground">Round</div>
             <div className="font-bold text-foreground">
-              {run.currentRound}/{run.totalRounds}
+              {(() => {
+                // Calculate current round from votingRounds if available, otherwise use currentRound field
+                if (run.votingRounds && run.votingRounds.length > 0) {
+                  // Find the highest round number that's OPEN or EXECUTING
+                  const openRound = run.votingRounds.find((r: any) => r.status === 'OPEN');
+                  if (openRound) {
+                    return `${openRound.round}/${run.totalRounds}`;
+                  }
+                  // If no open round, find the highest completed round
+                  const maxRound = Math.max(...run.votingRounds.map((r: any) => r.round || 0));
+                  return `${maxRound}/${run.totalRounds}`;
+                }
+                // Fallback: use currentRound field, default to 1 if 0 or undefined
+                const currentRound = run.currentRound && run.currentRound > 0 ? run.currentRound : (run.status === 'ACTIVE' ? 1 : 0);
+                return `${currentRound}/${run.totalRounds}`;
+              })()}
             </div>
           </div>
         </div>
@@ -367,12 +392,14 @@ export default function ActiveGame() {
                 {userParticipation?.totalVotes || 0}
               </div>
               <div className="text-sm text-muted-foreground">
-                {userParticipation
+                {userParticipation && userParticipation.totalVotes > 0
                   ? `${(
                       (userParticipation.votesCorrect / userParticipation.totalVotes) *
                       100
                     ).toFixed(0)}% correct`
-                  : 'No votes yet'}
+                  : userParticipation
+                  ? 'No votes yet'
+                  : 'Not participating'}
               </div>
             </CardContent>
           </Card>
@@ -527,7 +554,36 @@ export default function ActiveGame() {
                     <div>
                       <div className="text-sm text-muted-foreground">Strategy</div>
                       <div className="font-bold text-lg text-foreground">
-                        {lastTrade.leverage}x leverage, {lastTrade.positionSize}% size
+                        {(() => {
+                          // Convert from tenths format (stored as integers)
+                          // e.g., 67 = 6.7x, 865 = 86.5%
+                          const rawLeverage = typeof lastTrade.leverage === 'number'
+                            ? lastTrade.leverage
+                            : parseFloat(String(lastTrade.leverage)) || 10;
+                          const rawPositionSize = typeof lastTrade.positionSize === 'number'
+                            ? lastTrade.positionSize
+                            : parseFloat(String(lastTrade.positionSize)) || 50;
+                          
+                          // New format: values >= 10 are stored as tenths (10 = 1.0x, 200 = 20.0x)
+                          // Old format: values 1-20 are direct (1 = 1.0x, 20 = 20.0x)
+                          const leverage = rawLeverage >= 10 
+                            ? (rawLeverage / 10).toFixed(1) 
+                            : rawLeverage.toFixed(1);
+                          
+                          // Position size: values >= 100 are stored as tenths (100 = 10.0%, 1000 = 100.0%)
+                          // Old format: values 10-100 are direct (10 = 10%, 100 = 100%)
+                          const positionSize = rawPositionSize >= 100
+                            ? (rawPositionSize / 10).toFixed(1)
+                            : rawPositionSize.toFixed(1);
+                          
+                          // Clamp to valid ranges
+                          const leverageNum = parseFloat(leverage);
+                          const positionSizeNum = parseFloat(positionSize);
+                          const clampedLeverage = Math.max(1, Math.min(20, leverageNum)).toFixed(1);
+                          const clampedPositionSize = Math.max(10, Math.min(100, positionSizeNum)).toFixed(1);
+                          
+                          return `${clampedLeverage}x leverage, ${clampedPositionSize}% size`;
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -536,37 +592,69 @@ export default function ActiveGame() {
                     <div>
                       <div className="text-sm text-muted-foreground">Entry → Exit</div>
                       <div className="font-medium text-foreground">
-                        ${lastTrade.entryPrice} → ${lastTrade.exitPrice}
+                        ${lastTrade.entryPrice} → {lastTrade.exitPrice ? (
+                          `$${lastTrade.exitPrice}`
+                        ) : (
+                          currentPriceData?.success && currentPriceData.data ? (
+                            <span className="text-muted-foreground">
+                              ${currentPriceData.data.price.toFixed(2)} <span className="text-xs">(Open)</span>
+                            </span>
+                          ) : (
+                            'Open'
+                          )
+                        )}
                       </div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">Result</div>
                       <div
                         className={`font-bold text-lg ${
-                          lastTrade.pnl >= 0 ? 'text-success' : 'text-destructive'
+                          lastTrade.exitPrice !== null && lastTrade.exitPrice !== undefined
+                            ? (lastTrade.pnl >= 0 ? 'text-success' : 'text-destructive')
+                            : 'text-muted-foreground'
                         }`}
                       >
-                        {lastTrade.pnl >= 0 ? '+' : ''}
-                        {formatUSDC(lastTrade.pnl)} USDC
+                        {lastTrade.exitPrice !== null && lastTrade.exitPrice !== undefined ? (
+                          <>
+                            {lastTrade.pnl >= 0 ? '+' : ''}
+                            {formatUSDC(lastTrade.pnl)} USDC
+                          </>
+                        ) : (
+                          <span className="text-xs">
+                            {currentPriceData?.success && currentPriceData.data ? (
+                              <>
+                                Position Open
+                                <br />
+                                <span className="text-sm font-normal">
+                                  Current: ${currentPriceData.data.price.toFixed(2)}
+                                </span>
+                              </>
+                            ) : (
+                              'Position Open'
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-muted rounded p-3">
-                    <div className="text-sm text-muted-foreground mb-2">Vote Distribution</div>
-                    <div className="flex gap-4 text-sm text-foreground">
-                      <span>
-                        📈 LONG: <span className="font-bold">{lastTrade.votes.long}</span>
-                      </span>
-                      <span>
-                        📉 SHORT:{' '}
-                        <span className="font-bold">{lastTrade.votes.short}</span>
-                      </span>
-                      <span>
-                        ⏭️ SKIP: <span className="font-bold">{lastTrade.votes.skip}</span>
-                      </span>
+                  {lastTradeVoteDistribution && (
+                    <div className="bg-muted rounded p-3">
+                      <div className="text-sm text-muted-foreground mb-2">Vote Distribution</div>
+                      <div className="flex gap-4 text-sm text-foreground">
+                        <span>
+                          📈 LONG: <span className="font-bold">{lastTradeVoteDistribution.long ?? 0}</span>
+                        </span>
+                        <span>
+                          📉 SHORT:{' '}
+                          <span className="font-bold">{lastTradeVoteDistribution.short ?? 0}</span>
+                        </span>
+                        <span>
+                          ⏭️ SKIP: <span className="font-bold">{lastTradeVoteDistribution.skip ?? 0}</span>
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             )}
