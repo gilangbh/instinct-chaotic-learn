@@ -93,22 +93,30 @@ export default function Results() {
       id: 'most-correct',
       name: 'Most Correct Votes',
       emoji: '🎯',
-      winner: run.participants.reduce((prev, current) =>
-        prev.votesCorrect > current.votesCorrect ? prev : current
-      ).user,
+      winner: run.participants && run.participants.length > 0
+        ? run.participants.reduce((prev, current) =>
+            (prev.votesCorrect || 0) > (current.votesCorrect || 0) ? prev : current
+          ).user
+        : null,
     },
     {
       id: 'perfect-attendance',
       name: 'Perfect Attendance',
       emoji: '🗳️',
-      winner: run.participants.find((p) => p.totalVotes === 12)?.user,
+      winner: run.participants?.find((p) => (p.totalVotes || 0) === run.totalRounds)?.user,
     },
     {
       id: 'just-vibing',
       name: 'Just Vibing',
       emoji: '🎵',
-      winner: run.participants.find(
-        (p) => p.votesCorrect / p.totalVotes > 0.4 && p.votesCorrect / p.totalVotes < 0.6
+      winner: run.participants?.find(
+        (p) => {
+          const totalVotes = p.totalVotes || 0;
+          const votesCorrect = p.votesCorrect || 0;
+          if (totalVotes === 0) return false;
+          const accuracy = votesCorrect / totalVotes;
+          return accuracy > 0.4 && accuracy < 0.6;
+        }
       )?.user,
     },
   ];
@@ -255,17 +263,23 @@ export default function Results() {
                   <div className="bg-muted rounded-lg p-3 mt-4">
                     <div className="text-sm text-muted-foreground mb-1">Voting Accuracy</div>
                     <div className="text-2xl font-bold text-primary">
-                      {userParticipation.votesCorrect}/{userParticipation.totalVotes}{' '}
+                      {userParticipation.votesCorrect || 0}/{userParticipation.totalVotes || 0}{' '}
                       correct
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      (
-                      {(
-                        (userParticipation.votesCorrect /
-                          userParticipation.totalVotes) *
-                        100
-                      ).toFixed(0)}
-                      % accuracy)
+                      {userParticipation.totalVotes && userParticipation.totalVotes > 0 ? (
+                        <>
+                          (
+                          {(
+                            ((userParticipation.votesCorrect || 0) /
+                              userParticipation.totalVotes) *
+                            100
+                          ).toFixed(0)}
+                          % accuracy)
+                        </>
+                      ) : (
+                        'No votes cast'
+                      )}
                     </div>
                   </div>
 
@@ -292,7 +306,7 @@ export default function Results() {
                 <div
                   key={badge.id}
                   className={`rounded-lg p-6 text-center ${
-                    badge.winner?.id === currentUser.id
+                    badge.winner?.id === user?.id
                       ? 'bg-warning/10 border-2 border-warning/50'
                       : 'bg-muted border border-border'
                   }`}
@@ -303,7 +317,7 @@ export default function Results() {
                     {badge.winner ? (
                       <>
                         Winner: <span className="text-warning">{badge.winner.username}</span>
-                        {badge.winner.id === currentUser.id && (
+                        {badge.winner.id === user?.id && (
                           <div className="mt-2 text-success font-medium">✨ You earned this!</div>
                         )}
                       </>
@@ -329,7 +343,7 @@ export default function Results() {
                 .map((participant, index) => {
                   const profit =
                     (participant.finalShare || 0) - participant.depositAmount;
-                  const isCurrentUser = participant.user.id === currentUser.id;
+                  const isCurrentUser = participant.user.id === user?.id;
 
                   return (
                     <div
@@ -368,7 +382,7 @@ export default function Results() {
                             )}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {participant.votesCorrect}/{participant.totalVotes} votes
+                            {participant.votesCorrect || 0}/{participant.totalVotes || 0} votes
                             correct
                           </div>
                         </div>
@@ -392,6 +406,77 @@ export default function Results() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Trades History */}
+        {trades && trades.length > 0 && (
+          <Card className="card-elevated">
+            <CardHeader>
+              <CardTitle className="text-xl text-foreground">📈 Trade History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {trades.map((trade: any, index: number) => {
+                  const isProfit = (trade.pnl || 0) >= 0;
+                  return (
+                    <div
+                      key={trade.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-muted"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="text-2xl font-bold text-muted-foreground">
+                          #{trade.round}
+                        </div>
+                        <div>
+                          <div className="font-bold text-foreground">
+                            {trade.direction.toUpperCase()}{' '}
+                            {trade.direction.toLowerCase() === 'long' ? '📈' : 
+                             trade.direction.toLowerCase() === 'short' ? '📉' : 
+                             '⏭️'}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {trade.entryPrice && Number(trade.entryPrice) > 0 ? (
+                              <>
+                                ${Number(trade.entryPrice).toFixed(2)}
+                                {trade.exitPrice ? ` → $${Number(trade.exitPrice).toFixed(2)}` : ' (Open)'}
+                              </>
+                            ) : (
+                              'Price unavailable'
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div
+                          className={`text-xl font-bold ${
+                            isProfit ? 'text-success' : 'text-destructive'
+                          }`}
+                        >
+                          {isProfit ? '+' : ''}
+                          {formatUSDC(trade.pnl || 0)} USDC
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {(() => {
+                            const rawLeverage = typeof trade.leverage === 'number'
+                              ? trade.leverage
+                              : parseFloat(String(trade.leverage)) || 10;
+                            const rawPositionSize = typeof trade.positionSize === 'number'
+                              ? trade.positionSize
+                              : parseFloat(String(trade.positionSize)) || 50;
+                            
+                            const leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
+                            const positionSize = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
+                            
+                            return `${leverage.toFixed(1)}x leverage, ${positionSize.toFixed(1)}% size`;
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Action Buttons */}
         {userParticipation && !userParticipation.withdrawn && (

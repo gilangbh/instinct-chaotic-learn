@@ -1,12 +1,32 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { runHistory, formatUSDC } from '@/lib/mockData';
-import { ArrowLeft, Calendar, TrendingUp, TrendingDown, Users } from 'lucide-react';
+import { formatUSDC } from '@/lib/mockData';
+import { ArrowLeft, Calendar, TrendingUp, TrendingDown, Users, Loader2 } from 'lucide-react';
+import { useRuns } from '@/hooks/useApi';
 
 export default function History() {
   const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  
+  const { data: historyResponse, isLoading, error } = useRuns.useGetRunHistory(page, limit);
+  // Backend returns: { success: true, data: runs[], pagination: { total, ... } }
+  const runHistory = historyResponse?.data || [];
+  const totalRuns = historyResponse?.pagination?.total || 0;
+  const totalPages = historyResponse?.pagination?.totalPages || 0;
+
+  // Debug logging
+  if (historyResponse) {
+    console.log('[History] API Response:', {
+      hasData: !!historyResponse.data,
+      runsCount: Array.isArray(historyResponse.data) ? historyResponse.data.length : 0,
+      total: historyResponse.pagination?.total,
+      pagination: historyResponse.pagination,
+    });
+  }
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -40,46 +60,76 @@ export default function History() {
           </CardContent>
         </Card>
 
+        {/* Loading State */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <span className="ml-3 text-muted-foreground">Loading run history...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <Card className="card-elevated border-destructive/50">
+            <CardContent className="p-6 text-center">
+              <div className="text-2xl mb-2">❌</div>
+              <div className="text-xl font-bold text-foreground mb-2">Error Loading History</div>
+              <div className="text-muted-foreground">
+                Failed to load run history. Please try again later.
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats Overview */}
-        <div className="grid md:grid-cols-4 gap-4">
-          <Card className="card-elevated">
-            <CardContent className="p-6 text-center">
-              <div className="text-3xl font-bold text-primary">{runHistory.length}</div>
-              <div className="text-sm text-muted-foreground mt-1">Total Runs</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-6 text-center">
-              <div className="text-3xl font-bold text-success">
-                {runHistory.filter((r) => r.totalPool > r.startingPool).length}
-              </div>
-              <div className="text-sm text-muted-foreground mt-1">Winning Runs</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-6 text-center">
-              <div className="text-3xl font-bold text-destructive">
-                {runHistory.filter((r) => r.totalPool < r.startingPool).length}
-              </div>
-              <div className="text-sm text-muted-foreground mt-1">Losing Runs</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-6 text-center">
-              <div className="text-3xl font-bold text-secondary">
-                {runHistory.reduce((sum, r) => sum + r.participantCount, 0)}
-              </div>
-              <div className="text-sm text-muted-foreground mt-1">Total Participants</div>
-            </CardContent>
-          </Card>
-        </div>
+        {!isLoading && !error && (
+          <div className="grid md:grid-cols-4 gap-4">
+            <Card className="card-elevated">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-primary">{totalRuns}</div>
+                <div className="text-sm text-muted-foreground mt-1">Total Runs</div>
+              </CardContent>
+            </Card>
+            <Card className="card-elevated">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-success">
+                  {runHistory.filter((r) => (r.totalPool || 0) > (r.startingPool || 0)).length}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Winning Runs</div>
+              </CardContent>
+            </Card>
+            <Card className="card-elevated">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-destructive">
+                  {runHistory.filter((r) => (r.totalPool || 0) < (r.startingPool || 0)).length}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Losing Runs</div>
+              </CardContent>
+            </Card>
+            <Card className="card-elevated">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-secondary">
+                  {runHistory.reduce((sum, r) => sum + (r.participantCount || r.participants?.length || 0), 0)}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Total Participants</div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Runs List */}
-        <div className="space-y-4">
-          {runHistory.map((run) => {
-            const profitLoss = run.totalPool - run.startingPool;
-            const profitLossPercent = ((profitLoss / run.startingPool) * 100).toFixed(1);
-            const isProfit = profitLoss >= 0;
+        {!isLoading && !error && (
+          <div className="space-y-4">
+            {runHistory.map((run: any) => {
+              const startingPool = run.startingPool || 0;
+              const totalPool = run.totalPool || 0;
+              const profitLoss = totalPool - startingPool;
+              const profitLossPercent = startingPool > 0 
+                ? ((profitLoss / startingPool) * 100).toFixed(1)
+                : '0.0';
+              const isProfit = profitLoss >= 0;
+              const endedAt = run.endedAt ? new Date(run.endedAt) : null;
+              const participantCount = run.participantCount || run.participants?.length || 0;
 
             return (
               <Card
@@ -108,8 +158,14 @@ export default function History() {
                         </div>
                         <div className="text-sm text-muted-foreground font-normal mt-1 flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
-                          {run.endedAt?.toLocaleDateString()} at{' '}
-                          {run.endedAt?.toLocaleTimeString()}
+                          {endedAt ? (
+                            <>
+                              {endedAt.toLocaleDateString()} at{' '}
+                              {endedAt.toLocaleTimeString()}
+                            </>
+                          ) : (
+                            'Date unavailable'
+                          )}
                         </div>
                       </div>
                     </CardTitle>
@@ -133,22 +189,26 @@ export default function History() {
                   <div className="grid md:grid-cols-4 gap-4">
                     <div className="bg-muted rounded p-3">
                       <div className="text-sm text-muted-foreground mb-1">Starting Pool</div>
-                      <div className="font-bold text-foreground">{formatUSDC(run.startingPool)} USDC</div>
+                      <div className="font-bold text-foreground">{formatUSDC(startingPool)} USDC</div>
                     </div>
                     <div className="bg-muted rounded p-3">
                       <div className="text-sm text-muted-foreground mb-1">Final Pool</div>
-                      <div className="font-bold text-foreground">{formatUSDC(run.totalPool)} USDC</div>
+                      <div className="font-bold text-foreground">{formatUSDC(totalPool)} USDC</div>
                     </div>
                     <div className="bg-muted rounded p-3">
                       <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         Players
                       </div>
-                      <div className="font-bold text-foreground">{run.participantCount}</div>
+                      <div className="font-bold text-foreground">{participantCount}</div>
                     </div>
                     <div className="bg-muted rounded p-3">
                       <div className="text-sm text-muted-foreground mb-1">Duration</div>
-                      <div className="font-bold text-foreground">{run.duration} minutes</div>
+                      <div className="font-bold text-foreground">
+                        {run.duration || (run.startedAt && run.endedAt 
+                          ? Math.round((new Date(run.endedAt).getTime() - new Date(run.startedAt).getTime()) / 60000)
+                          : 'N/A')} minutes
+                      </div>
                     </div>
                   </div>
 
@@ -175,8 +235,10 @@ export default function History() {
             );
           })}
         </div>
+        )}
 
-        {runHistory.length === 0 && (
+        {/* Empty State */}
+        {!isLoading && !error && runHistory.length === 0 && (
           <Card className="card-elevated">
             <CardContent className="p-12 text-center">
               <div className="text-6xl mb-4">📊</div>
@@ -186,6 +248,29 @@ export default function History() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Pagination */}
+        {!isLoading && !error && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-4 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <div className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              Next
+            </Button>
+          </div>
         )}
       </div>
     </div>

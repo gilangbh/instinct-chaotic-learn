@@ -143,6 +143,7 @@ export const api = {
     vote: (id: string, data: CastVoteRequest & { round: number }) => apiClient.post(`/runs/${id}/vote`, data),
     getParticipants: (id: string) => apiClient.get<any[]>(`/runs/${id}/participants`),
     getTrades: (id: string) => apiClient.get<any[]>(`/runs/${id}/trades`),
+    getUnrealizedPnL: (id: string, round: number) => apiClient.get<{ unrealizedPnL: number | null }>(`/runs/${id}/trades/${round}/unrealized-pnl`),
     getCurrentVotingRound: (id: string) => apiClient.get<any>(`/runs/${id}/voting-round`),
   },
 

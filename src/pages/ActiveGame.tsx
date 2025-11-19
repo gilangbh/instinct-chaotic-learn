@@ -63,6 +63,18 @@ export default function ActiveGame() {
   const run = runQuery.data?.data;
   const currentVotingRound = votingRoundQuery.data?.data;
   const trades = tradesQuery.data?.data || [];
+  
+  // Get last trade for unrealized PnL query
+  const lastTrade = trades.length > 0 ? trades[trades.length - 1] : null;
+  const lastTradeRound = lastTrade && lastTrade.exitPrice === null ? lastTrade.round : null;
+  
+  // Fetch unrealized PnL from Drift for open positions
+  const unrealizedPnLQuery = useRuns.useGetUnrealizedPnL(
+    runId || '', 
+    lastTradeRound || 0, 
+    { enabled: enableQueries && lastTradeRound !== null && lastTrade?.direction !== 'SKIP' }
+  );
+  const driftUnrealizedPnL = unrealizedPnLQuery.data?.data?.unrealizedPnL;
 
   // Now we can safely use run for market queries - always call these hooks
   const marketSymbol = run?.coin ?? run?.tradingPair?.split('/')[0] ?? '';
@@ -72,6 +84,7 @@ export default function ActiveGame() {
 
   const isLoading = runQuery.isLoading || runQuery.isFetching || votingRoundQuery.isLoading || votingRoundQuery.isFetching || !run;
   const shouldRedirect = Boolean(run) && run.status !== 'ACTIVE';
+  const shouldRedirectToResults = Boolean(run) && run.status === 'ENDED';
 
   // For active runs, use run.totalPool (includes PnL from trades)
   // For waiting runs, use sum of participant deposits
@@ -175,10 +188,14 @@ export default function ActiveGame() {
     }
 
     if (!redirectToastShown.current) {
-      toast.error('This run is not active');
+      if (run?.status === 'ENDED') {
+        toast.success('Run completed! Redirecting to results...');
+      } else {
+        toast.error('This run is not active');
+      }
       redirectToastShown.current = true;
     }
-  }, [run, shouldRedirect]);
+  }, [run, shouldRedirect, shouldRedirectToResults]);
 
   // Format chart data - useMemo must be called before any early returns
   const priceHistoryData = priceHistoryQuery.data;
@@ -216,7 +233,13 @@ export default function ActiveGame() {
     );
   }
  
-  if (!runId || shouldRedirect) {
+  // Redirect to results if run has ended
+  if (shouldRedirectToResults && runId) {
+    return <Navigate to={`/results/${runId}`} replace />;
+  }
+
+  // Redirect to dashboard if run is not active and not ended (e.g., WAITING, CANCELLED)
+  if (!runId || (shouldRedirect && !shouldRedirectToResults)) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -226,8 +249,6 @@ export default function ActiveGame() {
     ? ((profitLoss / run.startingPool) * 100).toFixed(1)
     : '0.0';
   const isProfit = profitLoss >= 0;
-
-  const lastTrade = trades.length > 0 ? trades[trades.length - 1] : null;
   
   // Get vote distribution for last trade from the corresponding voting round
   const lastTradeVotingRound = lastTrade ? run?.votingRounds?.find(
@@ -316,19 +337,36 @@ export default function ActiveGame() {
             <div className="text-sm text-muted-foreground">Round</div>
             <div className="font-bold text-foreground">
               {(() => {
-                // Calculate current round from votingRounds if available, otherwise use currentRound field
+                // Calculate current round from votingRounds - rounds always count regardless of user votes
                 if (run.votingRounds && run.votingRounds.length > 0) {
-                  // Find the highest round number that's OPEN or EXECUTING
+                  // Find the highest round number that's OPEN (current active round)
                   const openRound = run.votingRounds.find((r: any) => r.status === 'OPEN');
                   if (openRound) {
                     return `${openRound.round}/${run.totalRounds}`;
                   }
-                  // If no open round, find the highest completed round
+                  
+                  // If no open round, find the highest round number from all voting rounds
+                  // This ensures rounds are counted even if user didn't vote
                   const maxRound = Math.max(...run.votingRounds.map((r: any) => r.round || 0));
+                  
+                  // If run is still active and we haven't reached total rounds, show next round
+                  if (run.status === 'ACTIVE' && maxRound < run.totalRounds) {
+                    return `${maxRound + 1}/${run.totalRounds}`;
+                  }
+                  
+                  // Otherwise show the max round (all rounds completed)
                   return `${maxRound}/${run.totalRounds}`;
                 }
-                // Fallback: use currentRound field, default to 1 if 0 or undefined
-                const currentRound = run.currentRound && run.currentRound > 0 ? run.currentRound : (run.status === 'ACTIVE' ? 1 : 0);
+                
+                // Fallback: use currentRound field or calculate from run status
+                // If run is active but no voting rounds yet, it's round 1
+                if (run.status === 'ACTIVE') {
+                  const currentRound = run.currentRound && run.currentRound > 0 ? run.currentRound : 1;
+                  return `${currentRound}/${run.totalRounds}`;
+                }
+                
+                // For ended runs, show 0 or last known round
+                const currentRound = run.currentRound && run.currentRound > 0 ? run.currentRound : 0;
                 return `${currentRound}/${run.totalRounds}`;
               })()}
             </div>
@@ -548,7 +586,9 @@ export default function ActiveGame() {
                       <div className="text-sm text-muted-foreground">Decision</div>
                       <div className="font-bold text-lg text-foreground">
                         {lastTrade.direction.toUpperCase()}{' '}
-                        {lastTrade.direction === 'long' ? '📈' : '📉'}
+                        {lastTrade.direction.toLowerCase() === 'long' ? '📈' : 
+                         lastTrade.direction.toLowerCase() === 'short' ? '📉' : 
+                         '⏭️'}
                       </div>
                     </div>
                     <div>
@@ -592,68 +632,157 @@ export default function ActiveGame() {
                     <div>
                       <div className="text-sm text-muted-foreground">Entry → Exit</div>
                       <div className="font-medium text-foreground">
-                        ${lastTrade.entryPrice} → {lastTrade.exitPrice ? (
-                          `$${lastTrade.exitPrice}`
+                        {lastTrade.entryPrice && Number(lastTrade.entryPrice) > 0 ? (
+                          <>
+                            ${Number(lastTrade.entryPrice).toFixed(2)} → {lastTrade.exitPrice ? (
+                              `$${Number(lastTrade.exitPrice).toFixed(2)}`
+                            ) : (
+                              currentPriceData?.success && currentPriceData.data ? (
+                                <span className="text-muted-foreground">
+                                  ${currentPriceData.data.price.toFixed(2)} <span className="text-xs">(Open)</span>
+                                </span>
+                              ) : (
+                                'Open'
+                              )
+                            )}
+                          </>
                         ) : (
-                          currentPriceData?.success && currentPriceData.data ? (
-                            <span className="text-muted-foreground">
-                              ${currentPriceData.data.price.toFixed(2)} <span className="text-xs">(Open)</span>
-                            </span>
-                          ) : (
-                            'Open'
-                          )
+                          <span className="text-muted-foreground text-sm">
+                            Entry price unavailable
+                          </span>
                         )}
                       </div>
                     </div>
                     <div>
-                      <div className="text-sm text-muted-foreground">Result</div>
-                      <div
-                        className={`font-bold text-lg ${
-                          lastTrade.exitPrice !== null && lastTrade.exitPrice !== undefined
-                            ? (lastTrade.pnl >= 0 ? 'text-success' : 'text-destructive')
-                            : 'text-muted-foreground'
-                        }`}
-                      >
-                        {lastTrade.exitPrice !== null && lastTrade.exitPrice !== undefined ? (
-                          <>
-                            {lastTrade.pnl >= 0 ? '+' : ''}
-                            {formatUSDC(lastTrade.pnl)} USDC
-                          </>
-                        ) : (
-                          <span className="text-xs">
-                            {currentPriceData?.success && currentPriceData.data ? (
-                              <>
-                                Position Open
-                                <br />
-                                <span className="text-sm font-normal">
-                                  Current: ${currentPriceData.data.price.toFixed(2)}
+                      <div className="text-sm text-muted-foreground">
+                        Result
+                      </div>
+                      <div className="space-y-1">
+                        {/* Total Run PnL */}
+                        <div className="text-xs text-muted-foreground">
+                          Total Run: {lastTrade.pnl >= 0 ? '+' : ''}
+                          {formatUSDC(lastTrade.pnl)} USDC
+                        </div>
+                        {/* User's Personal PnL */}
+                        {userParticipation && userDepositCents > 0 && (() => {
+                          // Calculate pool at trade time
+                          const previousClosedTrades = trades.filter(
+                            (t: any) => t.round < lastTrade.round && t.exitPrice !== null && t.exitPrice !== undefined
+                          );
+                          const previousPnL = previousClosedTrades.reduce(
+                            (sum: number, t: any) => sum + (t.pnl || 0),
+                            0
+                          );
+                          const poolAtTradeTime = (run?.startingPool || 0) + previousPnL;
+                          
+                          // User's share percentage of the pool at trade time
+                          const userSharePercent = poolAtTradeTime > 0 
+                            ? (userDepositCents / poolAtTradeTime) * 100 
+                            : 0;
+                          
+                          // Check if trade is closed or open
+                          const isTradeClosed = lastTrade.exitPrice !== null && lastTrade.exitPrice !== undefined;
+                          
+                          let userBasePnL: number;
+                          let userTotalPnL: number;
+                          let userBonus = 0;
+                          
+                          if (isTradeClosed) {
+                            // For closed trades, use actual PnL
+                            userBasePnL = (lastTrade.pnl * userSharePercent) / 100;
+                            
+                            // Calculate bonus if trade was profitable and user voted correctly
+                            if (lastTrade.pnl > 0 && userParticipation) {
+                              // Estimate bonus based on vote accuracy (1% per correct vote on profit share)
+                              const userVoteAccuracy = userParticipation.totalVotes > 0
+                                ? userParticipation.votesCorrect / userParticipation.totalVotes
+                                : 0;
+                              
+                              const estimatedBonusPercent = Math.min(userVoteAccuracy * 100, 12); // Max 12%
+                              userBonus = (userBasePnL * estimatedBonusPercent) / 100;
+                            }
+                            
+                            userTotalPnL = userBasePnL + userBonus;
+                          } else {
+                            // For open trades, calculate unrealized PnL
+                            let unrealizedPnL = 0;
+                            
+                            if (driftUnrealizedPnL !== null && driftUnrealizedPnL !== undefined) {
+                              // Use Drift's actual unrealized PnL
+                              unrealizedPnL = driftUnrealizedPnL;
+                            } else if (currentPriceData?.success && currentPriceData.data && lastTrade.entryPrice) {
+                              // Calculate manually
+                              const entryPrice = Number(lastTrade.entryPrice);
+                              const currentPrice = currentPriceData.data.price;
+                              const direction = lastTrade.direction.toLowerCase();
+                              
+                              const rawLeverage = typeof lastTrade.leverage === 'number'
+                                ? lastTrade.leverage
+                                : parseFloat(String(lastTrade.leverage)) || 10;
+                              const rawPositionSize = typeof lastTrade.positionSize === 'number'
+                                ? lastTrade.positionSize
+                                : parseFloat(String(lastTrade.positionSize)) || 50;
+                              
+                              const leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
+                              const positionSizePercent = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
+                              
+                              const positionSizeCents = (poolAtTradeTime * positionSizePercent) / 100;
+                              
+                              if (entryPrice > 0) {
+                                const priceChange = direction === 'long' 
+                                  ? (currentPrice - entryPrice) / entryPrice
+                                  : (entryPrice - currentPrice) / entryPrice;
+                                
+                                unrealizedPnL = positionSizeCents * leverage * priceChange;
+                              }
+                            }
+                            
+                            // User's share of unrealized PnL
+                            userBasePnL = (unrealizedPnL * userSharePercent) / 100;
+                            userTotalPnL = userBasePnL; // No bonus on unrealized PnL
+                          }
+                          
+                          return (
+                            <div
+                              className={`font-bold text-lg ${
+                                userTotalPnL >= 0 ? 'text-success' : 'text-destructive'
+                              }`}
+                            >
+                              Your Share: {userTotalPnL >= 0 ? '+' : ''}
+                              {formatUSDC(Math.round(userTotalPnL))} USDC
+                              {!isTradeClosed && (
+                                <span className="text-xs font-normal text-muted-foreground block">
+                                  (Unrealized)
                                 </span>
-                              </>
-                            ) : (
-                              'Position Open'
-                            )}
-                          </span>
-                        )}
+                              )}
+                              {isTradeClosed && userBonus > 0 && (
+                                <span className="text-xs font-normal text-muted-foreground block">
+                                  (Base: {formatUSDC(Math.round(userBasePnL))} + Bonus: {formatUSDC(Math.round(userBonus))})
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
 
                   {lastTradeVoteDistribution && (
-                    <div className="bg-muted rounded p-3">
-                      <div className="text-sm text-muted-foreground mb-2">Vote Distribution</div>
-                      <div className="flex gap-4 text-sm text-foreground">
-                        <span>
+                  <div className="bg-muted rounded p-3">
+                    <div className="text-sm text-muted-foreground mb-2">Vote Distribution</div>
+                    <div className="flex gap-4 text-sm text-foreground">
+                      <span>
                           📈 LONG: <span className="font-bold">{lastTradeVoteDistribution.long ?? 0}</span>
-                        </span>
-                        <span>
-                          📉 SHORT:{' '}
+                      </span>
+                      <span>
+                        📉 SHORT:{' '}
                           <span className="font-bold">{lastTradeVoteDistribution.short ?? 0}</span>
-                        </span>
-                        <span>
+                      </span>
+                      <span>
                           ⏭️ SKIP: <span className="font-bold">{lastTradeVoteDistribution.skip ?? 0}</span>
-                        </span>
-                      </div>
+                      </span>
                     </div>
+                  </div>
                   )}
                 </CardContent>
               </Card>
@@ -664,23 +793,23 @@ export default function ActiveGame() {
           <div className="space-y-4">
             {/* Countdown Timer */}
             {currentVotingRound ? (
-              <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-                <CardContent className="p-6">
-                  <div className="text-center">
-                    <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Time to Vote
-                    </div>
-                    <div className="text-5xl font-mono font-bold text-primary mb-2">
-                      {formatTime(displayTimeRemaining)}
-                    </div>
-                    <Progress
-                      value={(displayTimeRemaining / (run.votingInterval * 60)) * 100}
-                      className="h-2"
-                    />
+            <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Time to Vote
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="text-5xl font-mono font-bold text-primary mb-2">
+                      {formatTime(displayTimeRemaining)}
+                  </div>
+                  <Progress
+                      value={(displayTimeRemaining / (run.votingInterval * 60)) * 100}
+                    className="h-2"
+                  />
+                </div>
+              </CardContent>
+            </Card>
             ) : (
               <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
                 <CardContent className="p-6">
@@ -792,10 +921,10 @@ export default function ActiveGame() {
 
             {/* Voting Buttons */}
             {currentVotingRound ? (
-              <Card className="card-elevated">
-                <CardHeader>
+            <Card className="card-elevated">
+              <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
+                <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
                     {isWsConnected && (
                       <Badge variant="outline" className="text-xs">
                         🔴 Live
@@ -819,8 +948,8 @@ export default function ActiveGame() {
                       </div>
                     </div>
                   )}
-                </CardHeader>
-                <CardContent className="space-y-3">
+              </CardHeader>
+              <CardContent className="space-y-3">
                 <Button
                   className={`w-full h-20 text-lg font-bold shadow-soft-sm text-white transition-colors ${
                     userVote === 'long'

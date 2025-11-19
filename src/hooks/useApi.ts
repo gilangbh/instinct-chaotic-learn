@@ -148,6 +148,16 @@ export const useRuns = {
     });
   },
 
+  // Get unrealized PnL for an open trade
+  useGetUnrealizedPnL: (id: string, round: number, options?: { enabled?: boolean }) => {
+    return useQuery({
+      queryKey: ['run', id, 'trades', round, 'unrealized-pnl'],
+      queryFn: () => api.runs.getUnrealizedPnL(id, round),
+      enabled: (options?.enabled ?? true) && !!id && round > 0,
+      refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
+    });
+  },
+
   // Get current voting round
   // Note: With WebSocket, we don't need aggressive polling - WebSocket provides real-time vote updates
   useGetCurrentVotingRound: (id: string, options?: { enabled?: boolean }) => {
