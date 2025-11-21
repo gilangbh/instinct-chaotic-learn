@@ -102,7 +102,7 @@ const ClosingSection = () => {
       
       {/* Footer */}
       <div className="mt-16 text-center text-muted-foreground text-sm">
-        <p>© 2025 Instinct.fi. All rights reserved.</p>
+        <p>© 2025 instinctfi.xyz. All rights reserved.</p>
       </div>
     </section>
   );

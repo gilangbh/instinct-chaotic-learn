@@ -1,99 +1,118 @@
 import React from 'react';
-import { Activity } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Activity, Layers, Trophy, XCircle, Users, ChevronRight } from 'lucide-react';
 import { Panel } from '@/components/ui/instinct/Panel';
 import { Badge } from '@/components/ui/instinct/Badge';
+import { Button } from '@/components/ui/instinct/Button';
 import { runHistory, mockUsers, formatUSDC } from '@/lib/mockData';
 
 const History = () => {
-  // Map runHistory to recentEpochs format
-  const recentEpochs = runHistory.map(run => {
-     const isWin = run.totalPool >= run.startingPool;
-     const profit = ((run.totalPool - run.startingPool) / run.startingPool) * 100;
-     
-     return {
-        id: run.id,
-        pair: run.tradingPair || 'Unknown',
-        result: isWin ? 'WIN' : 'LOSS',
-        profit: `${isWin ? '+' : ''}${profit.toFixed(1)}%`,
-        consensus: run.participants.length > 0 ? 'LONG (Majority)' : 'Mixed', // Mock consensus logic
-        rawProfit: profit
-     };
-  });
+  const navigate = useNavigate();
+  
+  const historyLogs = runHistory.map(run => ({
+    id: `RUN #${run.id}`,
+    pair: run.tradingPair || 'Unknown',
+    result: run.totalPool >= run.startingPool ? 'WIN' : 'LOSS',
+    change: `${run.totalPool >= run.startingPool ? '+' : ''}${((run.totalPool - run.startingPool) / run.startingPool * 100).toFixed(1)}%`,
+    amount: `${run.totalPool >= run.startingPool ? '+' : ''}${formatUSDC(run.totalPool - run.startingPool)} USDC`,
+    start: formatUSDC(run.startingPool),
+    end: formatUSDC(run.totalPool),
+    players: run.participantCount,
+    duration: `${run.duration}m`
+  }));
 
-  // Map mockUsers to topNodes format
-  const topNodes = [...mockUsers]
-     .sort((a, b) => b.xp - a.xp)
-     .map((user, i) => ({
-        rank: i + 1,
-        name: user.username,
-        score: user.xp.toLocaleString(),
-        winRate: `${user.winRate.toFixed(0)}%`,
-        me: user.id === 'user-1' // currentUser id
-     }));
+  const stats = [
+    { label: "Total Runs", val: runHistory.length.toString(), icon: Layers, color: "text-indigo-400" },
+    { label: "Victories", val: runHistory.filter(r => r.totalPool >= r.startingPool).length.toString(), icon: Trophy, color: "text-emerald-400" },
+    { label: "Defeats", val: runHistory.filter(r => r.totalPool < r.startingPool).length.toString(), icon: XCircle, color: "text-red-400" },
+    { label: "Participants", val: runHistory.reduce((acc, r) => acc + r.participantCount, 0).toString(), icon: Users, color: "text-zinc-200" },
+  ];
 
   return (
-    <div className="p-8 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar">
-       <div className="flex items-center gap-4 mb-8 border-b border-zinc-800 pb-6">
-          <Activity size={32} className="text-indigo-500" />
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="p-4 lg:p-6 max-w-[1800px] mx-auto animate-in fade-in duration-500">
+       {/* Header */}
+       <div className="flex items-center gap-4 mb-8 border-b border-zinc-800/50 pb-6 relative">
+          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-indigo-500/0 via-indigo-500/50 to-indigo-500/0" />
+          <div className="w-16 h-16 bg-indigo-500/10 flex items-center justify-center border border-indigo-500/30 hexagon-clip animate-pulse">
+             <Activity size={32} className="text-indigo-500" />
+          </div>
           <div>
-            <h1 className="text-3xl font-light text-white font-display">NETWORK <span className="text-zinc-600">ACTIVITY</span></h1>
-            <p className="text-zinc-500 font-mono text-xs">GLOBAL_CONSENSUS_TRACKING</p>
+            <h1 className="text-3xl font-light text-white font-display">ARCHIVE <span className="text-zinc-600">//</span> LOGS</h1>
+            <p className="text-zinc-500 font-mono text-xs tracking-widest flex items-center gap-2">
+               <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+               PAST_CYCLE_DATA
+            </p>
           </div>
        </div>
 
-       <div className="grid grid-cols-12 gap-8">
-          {/* Recent Epochs */}
-          <div className="col-span-12 lg:col-span-7 space-y-4">
-             <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Recent Consensus Epochs</h3>
-             {recentEpochs.map((epoch, i) => (
-                <Panel key={i} className="p-4 flex items-center justify-between group hover:border-zinc-700">
-                   <div className="flex items-center gap-4">
-                      <div className={`w-1 h-12 ${epoch.result === 'WIN' ? 'bg-emerald-500' : 'bg-[#FF2A6D]'}`} />
-                      <div>
-                         <div className="text-lg text-white font-light">{epoch.pair}</div>
-                         <div className="text-xs text-zinc-500 font-mono">#{epoch.id} • {epoch.consensus}</div>
-                      </div>
-                   </div>
-                   <div className="text-right">
-                      <Badge 
-                        label={epoch.result} 
-                        color={epoch.result === 'WIN' ? 'emerald' : 'red'} 
-                      />
-                      <div className={`text-sm font-mono mt-1 ${epoch.result === 'WIN' ? 'text-emerald-400' : 'text-[#FF2A6D]'}`}>
-                         {epoch.profit}
-                      </div>
-                   </div>
-                </Panel>
-             ))}
-          </div>
+       {/* Summary Cards */}
+       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+         {stats.map((stat, i) => (
+            <Panel key={i} className="p-4 flex flex-col items-center justify-center hover:border-indigo-500/30">
+               <div className={`mb-2 opacity-80 ${stat.color}`}><stat.icon size={20} /></div>
+               <div className={`text-2xl font-display font-bold ${stat.color}`}>{stat.val}</div>
+               <div className="text-[10px] uppercase tracking-widest text-zinc-600">{stat.label}</div>
+            </Panel>
+         ))}
+       </div>
 
-          {/* Leaderboard */}
-          <div className="col-span-12 lg:col-span-5 space-y-4">
-             <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2">Top Active Nodes</h3>
-             <Panel className="p-0 overflow-hidden">
-                {topNodes.map((node, i) => (
-                   <div 
-                     key={i} 
-                     className={`
-                       p-4 flex items-center justify-between border-b border-zinc-800 last:border-0
-                       ${node.me ? 'bg-indigo-900/10 border-l-2 border-l-indigo-500' : ''}
-                     `}
+       {/* History List */}
+       <div className="space-y-4">
+          <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 pl-1">Operation Logs</h3>
+          {historyLogs.map((log, i) => (
+             <Panel key={i} className="p-6 flex flex-col md:flex-row justify-between items-center gap-6 group hover:border-indigo-500/30 transition-all hover:bg-indigo-500/5">
+                
+                {/* Left: Status */}
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                   <div className={`w-1 h-16 transition-all group-hover:h-20 group-hover:w-1.5 rounded-full ${log.result === 'WIN' ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]'}`} />
+                   <div>
+                      <div className="flex items-center gap-3 mb-1">
+                         <Badge label={log.id} color="zinc" />
+                         <Badge label={log.result} color={log.result === 'WIN' ? 'emerald' : 'red'} pulse={log.result === 'WIN'} />
+                      </div>
+                      <div className="text-xl text-white font-display tracking-wide">{log.pair}</div>
+                      <div className="text-[10px] text-zinc-500 font-mono">timestamp: 11/21/2025</div>
+                   </div>
+                </div>
+
+                {/* Middle: Details Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 w-full md:w-auto bg-zinc-900/30 p-3 rounded border border-zinc-800/50">
+                   <div>
+                      <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Start Pool</div>
+                      <div className="font-mono text-zinc-300 text-xs">{log.start}</div>
+                   </div>
+                   <div>
+                      <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Final Pool</div>
+                      <div className="font-mono text-white text-xs">{log.end}</div>
+                   </div>
+                   <div>
+                      <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Players</div>
+                      <div className="font-mono text-zinc-300 text-xs">{log.players}</div>
+                   </div>
+                   <div>
+                      <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Duration</div>
+                      <div className="font-mono text-zinc-300 text-xs">{log.duration}</div>
+                   </div>
+                </div>
+
+                {/* Right: Result */}
+                <div className="text-right w-full md:w-auto">
+                   <div className={`text-2xl font-display font-bold ${log.result === 'WIN' ? 'text-emerald-400' : 'text-red-500'}`}>
+                      {log.change}
+                   </div>
+                   <div className="text-xs font-mono text-zinc-500">{log.amount}</div>
+                   <button 
+                      onClick={() => navigate('/results')}
+                      className="mt-2 text-[10px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:underline flex items-center gap-1 hover:gap-2 transition-all"
                    >
-                      <div className="flex items-center gap-4">
-                         <div className="font-mono text-zinc-500 w-6">#{node.rank}</div>
-                         <div className={node.me ? 'text-indigo-400 font-bold' : 'text-zinc-300'}>
-                            {node.name} {node.me && <span className="text-[10px] ml-2 bg-indigo-500 text-black px-1 rounded">YOU</span>}
-                         </div>
-                      </div>
-                      <div className="text-right">
-                         <div className="text-zinc-200 font-mono">{node.score} XP</div>
-                         <div className="text-[10px] text-zinc-500">{node.winRate} ACC</div>
-                      </div>
-                   </div>
-                ))}
+                      VIEW_FULL_ANALYSIS <ChevronRight size={12} />
+                   </button>
+                </div>
              </Panel>
-          </div>
+          ))}
        </div>
+      </div>
     </div>
   );
 };

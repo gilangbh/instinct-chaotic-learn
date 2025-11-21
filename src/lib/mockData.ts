@@ -1,4 +1,4 @@
-// Mock Data for Instinct.fi
+// Mock Data for instinctfi.xyz
 
 export interface User {
   id: string;

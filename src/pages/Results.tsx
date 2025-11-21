@@ -1,16 +1,20 @@
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/instinct/Button';
+import { Panel } from '@/components/ui/instinct/Panel';
+import { Badge } from '@/components/ui/instinct/Badge';
 import { endedRun, currentUser, formatUSDC } from '@/lib/mockData';
 import {
   Trophy,
   TrendingUp,
   TrendingDown,
-  ArrowLeft,
+  ChevronRight,
   Download,
   RotateCcw,
   Award,
+  Target,
+  Users,
+  Zap,
+  CheckCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,350 +52,253 @@ export default function Results() {
   };
 
   // Award badges based on performance
-  const badges = [
-    {
-      id: 'most-correct',
-      name: 'Most Correct Votes',
-      emoji: '🎯',
-      winner: endedRun.participants.reduce((prev, current) =>
-        prev.votesCorrect > current.votesCorrect ? prev : current
-      ).user,
-    },
+  const earnedBadges = [
     {
       id: 'perfect-attendance',
       name: 'Perfect Attendance',
       emoji: '🗳️',
-      winner: endedRun.participants.find((p) => p.totalVotes === 12)?.user,
+      description: 'Voted in all rounds',
+      earned: userParticipation && userParticipation.totalVotes === endedRun.totalRounds,
     },
     {
-      id: 'just-vibing',
-      name: 'Just Vibing',
-      emoji: '🎵',
-      winner: endedRun.participants.find(
-        (p) => p.votesCorrect / p.totalVotes > 0.4 && p.votesCorrect / p.totalVotes < 0.6
-      )?.user,
+      id: 'most-correct',
+      name: 'Oracle',
+      emoji: '🎯',
+      description: 'Most correct votes',
+      earned: userParticipation && userParticipation.votesCorrect >= 8,
     },
-  ];
+  ].filter(b => b.earned);
+
+  // Sort participants by final share for leaderboard
+  const leaderboard = [...endedRun.participants].sort(
+    (a, b) => (b.finalShare || 0) - (a.finalShare || 0)
+  );
+
+  const onExit = () => {
+    navigate('/dashboard');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="flex flex-col p-4 lg:p-6 max-w-[1800px] mx-auto animate-in fade-in duration-500 min-h-full">
       {/* Header */}
-      <div className="bg-card border-b border-border px-4 py-3 shadow-soft-sm">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">Run #{endedRun.id}</div>
-            <div className="font-bold text-foreground">{endedRun.tradingPair}</div>
+      <div className="flex justify-between items-center mb-6 border-b border-zinc-800/50 pb-4 relative">
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-indigo-500/0 via-indigo-500/50 to-indigo-500/0" />
+        <div className="flex items-center gap-6">
+          <button onClick={onExit} className="text-zinc-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full">
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h2 className="text-3xl font-display font-bold text-white tracking-tight flex items-center gap-3">
+              RUN #{endedRun.id} COMPLETE
+            </h2>
+            <div className="text-[10px] text-zinc-500 font-mono mt-1 flex gap-3">
+              <span>{endedRun.tradingPair}</span>
+              <span className="text-zinc-700">|</span>
+              <span>DURATION: {endedRun.duration}m</span>
+            </div>
           </div>
-          <Badge className="bg-muted text-muted-foreground">ENDED</Badge>
+          <Badge label="ENDED" color="zinc" />
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto p-4 space-y-6">
-        {/* Hero Section */}
-        <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-          <CardContent className="p-8 text-center">
-            <div className="text-6xl mb-4">
-              {isProfit ? '🎉' : '💪'}
+      {/* Result Hero Section */}
+      <div className="mb-8">
+        <Panel active className="p-8 relative overflow-hidden">
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] ${isProfit ? 'bg-emerald-600/10' : 'bg-red-600/10'} rounded-full blur-[120px] pointer-events-none`} />
+          
+          <div className="relative z-10 text-center space-y-6">
+            <div className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center ${isProfit ? 'bg-emerald-500/10 text-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.3)]' : 'bg-red-500/10 text-red-400 shadow-[0_0_40px_rgba(239,68,68,0.3)]'} hexagon-clip`}>
+              {isProfit ? <Trophy size={48} className="animate-pulse" /> : <TrendingDown size={48} />}
             </div>
-            <h1 className="text-4xl font-bold mb-2 text-foreground">
-              {isProfit ? 'Game Won!' : 'Game Complete!'}
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              {isProfit
-                ? 'The community made money together! 🚀'
-                : 'Better luck next time! Keep learning and growing.'}
-            </p>
-          </CardContent>
-        </Card>
+            
+            <div>
+              <h3 className="text-2xl font-display text-zinc-400 mb-2">FINAL POOL VALUE</h3>
+              <div className="text-6xl font-display font-bold text-white mb-4">
+                {formatUSDC(endedRun.totalPool)} <span className="text-2xl text-zinc-500">USDC</span>
+              </div>
+              <div className={`text-3xl font-mono font-bold ${isProfit ? 'text-emerald-400' : 'text-red-500'}`}>
+                {isProfit ? '+' : ''}{profitLossPercent}%
+                <span className="text-lg ml-3 text-zinc-500">
+                  ({isProfit ? '+' : ''}{formatUSDC(profitLoss)} USDC)
+                </span>
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </div>
 
-        {/* Pool Results */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="card-elevated">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <Trophy className="w-5 h-5 text-warning" />
-                Pool Results
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Starting Pool</span>
-                  <span className="text-xl font-bold text-foreground">
-                    {formatUSDC(endedRun.startingPool)} USDC
-                  </span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column - User Stats & Badges */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Your Performance */}
+          <Panel className="p-6">
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+              <Target size={14} className="text-indigo-500" /> Your Performance
+            </h3>
+            
+            {userParticipation ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-900/50 p-4 border border-zinc-800/50">
+                    <div className="text-[10px] uppercase text-zinc-500 mb-2">Initial Deposit</div>
+                    <div className="text-2xl font-mono text-zinc-200">
+                      {formatUSDC(userParticipation.depositAmount)} USDC
+                    </div>
+                  </div>
+                  
+                  <div className={`bg-zinc-900/50 p-4 border ${userProfit >= 0 ? 'border-emerald-500/30' : 'border-red-500/30'}`}>
+                    <div className="text-[10px] uppercase text-zinc-500 mb-2">Final Share</div>
+                    <div className="text-2xl font-mono text-white">
+                      {formatUSDC(userParticipation.finalShare || 0)} USDC
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Final Pool</span>
-                  <span className="text-xl font-bold text-foreground">
-                    {formatUSDC(endedRun.totalPool)} USDC
-                  </span>
+
+                <div className={`p-6 border-2 ${userProfit >= 0 ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'} relative overflow-hidden`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs uppercase text-zinc-400 mb-2">Your Result</div>
+                      <div className={`text-4xl font-display font-bold ${userProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                        {userProfit >= 0 ? '+' : ''}{formatUSDC(userProfit)} USDC
+                      </div>
+                      <div className={`text-xl font-mono mt-1 ${userProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                        {userProfit >= 0 ? '+' : ''}{userProfitPercent}%
+                      </div>
+                    </div>
+                    <div className={`text-6xl opacity-10 ${userProfit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {userProfit >= 0 ? <TrendingUp /> : <TrendingDown />}
+                    </div>
+                  </div>
                 </div>
-                <div className="border-t border-border pt-3 flex justify-between items-center">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    {isProfit ? (
-                      <TrendingUp className="w-5 h-5 text-success" />
-                    ) : (
-                      <TrendingDown className="w-5 h-5 text-destructive" />
-                    )}
-                    Total P/L
-                  </span>
-                  <span
-                    className={`text-3xl font-bold ${
-                      isProfit ? 'text-success' : 'text-destructive'
-                    }`}
-                  >
-                    {isProfit ? '+' : ''}
-                    {formatUSDC(profitLoss)} USDC
-                  </span>
-                </div>
-                <div className="text-center">
-                  <span
-                    className={`text-2xl font-bold ${
-                      isProfit ? 'text-success' : 'text-destructive'
-                    }`}
-                  >
-                    ({isProfit ? '+' : ''}
-                    {profitLossPercent}%)
-                  </span>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-zinc-900/30 p-4 border border-zinc-800/50 text-center">
+                    <div className="text-2xl font-display font-bold text-indigo-400">
+                      {userParticipation.totalVotes}
+                    </div>
+                    <div className="text-[10px] uppercase text-zinc-500 mt-1">Total Votes</div>
+                  </div>
+                  
+                  <div className="bg-zinc-900/30 p-4 border border-zinc-800/50 text-center">
+                    <div className="text-2xl font-display font-bold text-emerald-400">
+                      {userParticipation.votesCorrect}
+                    </div>
+                    <div className="text-[10px] uppercase text-zinc-500 mt-1">Correct</div>
+                  </div>
+                  
+                  <div className="bg-zinc-900/30 p-4 border border-zinc-800/50 text-center">
+                    <div className="text-2xl font-display font-bold text-cyan-400">
+                      {userParticipation.totalVotes > 0 ? Math.round((userParticipation.votesCorrect / userParticipation.totalVotes) * 100) : 0}%
+                    </div>
+                    <div className="text-[10px] uppercase text-zinc-500 mt-1">Accuracy</div>
+                  </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            ) : (
+              <div className="text-center py-8 text-zinc-500">
+                You did not participate in this run
+              </div>
+            )}
+          </Panel>
 
-          {/* Your Performance */}
-          {userParticipation && (
-            <Card className="bg-success/10 border-success/30 shadow-soft-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-foreground">
-                  <Award className="w-5 h-5 text-success" />
-                  Your Performance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Your Deposit</span>
-                    <span className="text-xl font-bold text-foreground">
-                      {formatUSDC(userParticipation.depositAmount)} USDC
-                    </span>
+          {/* Earned Badges */}
+          {earnedBadges.length > 0 && (
+            <Panel className="p-6">
+              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <Award size={14} className="text-amber-500" /> Badges Earned
+              </h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {earnedBadges.map((badge) => (
+                  <div
+                    key={badge.id}
+                    className="bg-gradient-to-br from-amber-900/20 to-amber-900/5 border border-amber-500/30 rounded p-4 flex items-center gap-4 animate-in slide-in-from-left duration-500"
+                  >
+                    <div className="text-4xl">{badge.emoji}</div>
+                    <div className="flex-1">
+                      <div className="font-display font-bold text-amber-200">{badge.name}</div>
+                      <div className="text-[10px] text-zinc-500 mt-1">{badge.description}</div>
+                    </div>
+                    <CheckCircle size={20} className="text-amber-500" />
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Your Final Share</span>
-                    <span className="text-xl font-bold text-foreground">
-                      {formatUSDC(userParticipation.finalShare || 0)} USDC
-                    </span>
-                  </div>
-                  <div className="border-t border-border pt-3 flex justify-between items-center">
-                    <span className="text-muted-foreground">Your P/L</span>
-                    <span
-                      className={`text-3xl font-bold ${
-                        userProfit >= 0 ? 'text-success' : 'text-destructive'
-                      }`}
-                    >
-                      {userProfit >= 0 ? '+' : ''}
-                      {formatUSDC(userProfit)} USDC
-                    </span>
-                  </div>
-                  <div className="text-center">
-                    <span
-                      className={`text-2xl font-bold ${
-                        userProfit >= 0 ? 'text-success' : 'text-destructive'
-                      }`}
-                    >
-                      ({userProfit >= 0 ? '+' : ''}
-                      {userProfitPercent}%)
-                    </span>
-                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
 
-                  <div className="bg-muted rounded-lg p-3 mt-4">
-                    <div className="text-sm text-muted-foreground mb-1">Voting Accuracy</div>
-                    <div className="text-2xl font-bold text-primary">
-                      {userParticipation.votesCorrect}/{userParticipation.totalVotes}{' '}
-                      correct
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      (
-                      {(
-                        (userParticipation.votesCorrect /
-                          userParticipation.totalVotes) *
-                        100
-                      ).toFixed(0)}
-                      % accuracy)
-                    </div>
-                  </div>
-
-                  <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
-                    <div className="text-sm text-muted-foreground mb-1">XP Earned</div>
-                    <div className="text-2xl font-bold text-warning">
-                      +145 XP ⭐
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Action Buttons */}
+          {userParticipation && !userParticipation.withdrawn && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Button variant="primary" className="w-full h-16 flex items-center justify-center gap-3" onClick={handleWithdraw}>
+                <Download size={20} /> Withdraw Funds
+              </Button>
+              
+              <Button variant="system" className="w-full h-16 flex items-center justify-center gap-3" onClick={handlePlayAgain}>
+                <RotateCcw size={20} /> Play Again
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* Badges Earned */}
-        <Card className="card-elevated">
-          <CardHeader>
-            <CardTitle className="text-xl text-foreground">🏆 Badges Awarded</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-4">
-              {badges.map((badge) => (
-                <div
-                  key={badge.id}
-                  className={`rounded-lg p-6 text-center ${
-                    badge.winner?.id === currentUser.id
-                      ? 'bg-warning/10 border-2 border-warning/50'
-                      : 'bg-muted border border-border'
-                  }`}
-                >
-                  <div className="text-5xl mb-3">{badge.emoji}</div>
-                  <div className="font-bold text-lg mb-2 text-foreground">{badge.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {badge.winner ? (
-                      <>
-                        Winner: <span className="text-warning">{badge.winner.username}</span>
-                        {badge.winner.id === currentUser.id && (
-                          <div className="mt-2 text-success font-medium">✨ You earned this!</div>
-                        )}
-                      </>
-                    ) : (
-                      'No winner'
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Leaderboard */}
-        <Card className="card-elevated">
-          <CardHeader>
-            <CardTitle className="text-xl text-foreground">📊 Final Leaderboard</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* Right Column - Leaderboard */}
+        <div className="lg:col-span-5">
+          <Panel className="p-6 h-full">
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+              <Users size={14} className="text-indigo-500" /> Final Leaderboard
+            </h3>
+            
             <div className="space-y-2">
-              {endedRun.participants
-                .sort((a, b) => (b.finalShare || 0) - (a.finalShare || 0))
-                .map((participant, index) => {
-                  const profit =
-                    (participant.finalShare || 0) - participant.depositAmount;
-                  const isCurrentUser = participant.user.id === currentUser.id;
-
-                  return (
-                    <div
-                      key={participant.user.id}
-                      className={`flex items-center justify-between p-4 rounded-lg ${
-                        isCurrentUser
-                          ? 'bg-primary/10 border-2 border-primary/50'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold text-white ${
-                            index === 0
-                              ? 'bg-gradient-to-br from-amber-400 to-amber-600'
-                              : index === 1
-                              ? 'bg-gradient-to-br from-gray-300 to-gray-500'
-                              : index === 2
-                              ? 'bg-gradient-to-br from-amber-600 to-amber-800'
-                              : ''
-                          }`}
-                          style={index > 2 ? { background: 'hsl(var(--muted-foreground))' } : {}}
-                        >
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                        </div>
-                        <div>
-                          <div className="font-bold text-foreground">
-                            {participant.user.username}
-                            {isCurrentUser && (
-                              <Badge
-                                variant="outline"
-                                className="ml-2 border-primary text-primary"
-                              >
-                                You
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {participant.votesCorrect}/{participant.totalVotes} votes
-                            correct
-                          </div>
-                        </div>
+              {leaderboard.map((participant, index) => {
+                const profit = (participant.finalShare || 0) - participant.depositAmount;
+                const isCurrentUser = participant.user.id === currentUser.id;
+                
+                return (
+                  <div
+                    key={participant.user.id}
+                    className={`flex items-center justify-between p-3 border transition-all ${
+                      isCurrentUser
+                        ? 'bg-indigo-900/20 border-indigo-500/30'
+                        : 'bg-zinc-900/30 border-zinc-800/50 hover:bg-zinc-900/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-8 h-8 flex items-center justify-center font-mono font-bold ${
+                        index === 0 ? 'text-amber-400 text-xl' : 
+                        index === 1 ? 'text-zinc-300' : 
+                        index === 2 ? 'text-amber-600' : 
+                        'text-zinc-500'
+                      }`}>
+                        {index === 0 ? '👑' : index + 1}
                       </div>
-                      <div className="text-right">
-                        <div className="text-xl font-bold text-foreground">
-                          {formatUSDC(participant.finalShare || 0)} USDC
+                      
+                      <div>
+                        <div className={`font-mono text-sm ${isCurrentUser ? 'text-indigo-300 font-bold' : 'text-zinc-300'}`}>
+                          {participant.user.username}
+                          {isCurrentUser && <span className="ml-2 text-[9px] bg-indigo-500 text-black px-1 rounded">YOU</span>}
                         </div>
-                        <div
-                          className={`text-sm font-medium ${
-                            profit >= 0 ? 'text-success' : 'text-destructive'
-                          }`}
-                        >
-                          {profit >= 0 ? '+' : ''}
-                          {formatUSDC(profit)} USDC
+                        <div className="text-[10px] text-zinc-600">
+                          {participant.user.walletAddress}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                    
+                    <div className="text-right">
+                      <div className="font-mono text-sm text-white">
+                        {formatUSDC(participant.finalShare || 0)}
+                      </div>
+                      <div className={`text-[10px] font-mono ${profit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                        {profit >= 0 ? '+' : ''}{formatUSDC(profit)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Action Buttons */}
-        {userParticipation && !userParticipation.withdrawn && (
-          <div className="grid md:grid-cols-2 gap-4">
-            <Button
-              size="lg"
-              className="font-bold text-lg py-6 shadow-soft-md"
-              style={{ background: 'linear-gradient(to right, hsl(var(--success)), hsl(142 71% 40%))' }}
-              onClick={handleWithdraw}
-            >
-              <Download className="mr-2 w-5 h-5" />
-              Withdraw {formatUSDC(userParticipation.finalShare || 0)} USDC
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="font-bold text-lg py-6"
-              onClick={handlePlayAgain}
-            >
-              <RotateCcw className="mr-2 w-5 h-5" />
-              Play Again
-            </Button>
-          </div>
-        )}
-
-        {userParticipation?.withdrawn && (
-          <Card className="bg-success/10 border-success/30">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl mb-2">✅</div>
-              <div className="font-bold text-lg text-success">
-                Funds Already Withdrawn
-              </div>
-              <div className="text-sm text-muted-foreground mt-2">
-                Your funds have been sent to your wallet
-              </div>
-            </CardContent>
-          </Card>
-        )}
+          </Panel>
+        </div>
+      </div>
       </div>
     </div>
   );
 }
-

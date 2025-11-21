@@ -9,7 +9,7 @@ const SolutionSection = () => {
         </h2>
         
         <p className="text-xl md:text-2xl text-foreground/80 leading-relaxed border-l-4 border-primary pl-8">
-          Instinct.fi reframes trading as a social roguelike. Users vote on trades, spin randomized 
+          instinctfi.xyz reframes trading as a social roguelike. Users vote on trades, spin randomized 
           strategies, and face unpredictable outcomes in weekly 'runs,' making each cycle chaotic yet educational.
         </p>
       </div>

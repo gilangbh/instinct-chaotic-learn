@@ -9,7 +9,7 @@ const OpportunitySection = () => {
         </h2>
         
         <p className="text-xl md:text-2xl text-foreground/80 leading-relaxed border-l-4 border-primary pl-8">
-          Instinct.fi creates a new category of social-finance experimentation where communities 
+          instinctfi.xyz creates a new category of social-finance experimentation where communities 
           explore markets together, coordinate decisions, and learn from transparent outcomes.
         </p>
       </div>

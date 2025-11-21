@@ -28,7 +28,7 @@ const HeroSection = () => {
         </div>
         
         <h1 className="text-7xl md:text-9xl font-black mb-6 glow-cyan">
-          Instinct.fi
+          instinctfi.xyz
         </h1>
         
         <p className="text-2xl md:text-4xl font-semibold mb-12 text-muted-foreground max-w-4xl mx-auto">
