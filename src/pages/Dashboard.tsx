@@ -1,330 +1,186 @@
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import {
-  activeRun,
-  waitingRun,
-  currentUser,
-  formatUSDC,
-  formatTime,
-  getRunStatusEmoji,
-} from '@/lib/mockData';
-import { ArrowRight, TrendingUp, Users, Clock, Coins } from 'lucide-react';
+import { 
+  Zap, Activity, Box, Cpu, Terminal, Shield, Layers, Target, ChevronRight 
+} from 'lucide-react';
+import { Panel } from '@/components/ui/instinct/Panel';
+import { Button } from '@/components/ui/instinct/Button';
+import { Badge } from '@/components/ui/instinct/Badge';
+import { activeRun, runHistory, formatUSDC } from '@/lib/mockData';
 
-export default function Dashboard() {
+const Dashboard = () => {
   const navigate = useNavigate();
 
-  // Determine which run to show
-  const displayRun = activeRun.status === 'active' ? activeRun : waitingRun;
-  const isActive = displayRun.status === 'active';
-  const isWaiting = displayRun.status === 'waiting';
-
-  const userParticipation = displayRun.participants.find(
-    (p) => p.user.id === currentUser.id
-  );
-  const isParticipating = !!userParticipation;
-
-  const profitLoss = displayRun.totalPool - displayRun.startingPool;
-  const profitLossPercent = ((profitLoss / displayRun.startingPool) * 100).toFixed(1);
-  const isProfit = profitLoss >= 0;
-
-  const progress = isActive
-    ? (displayRun.currentRound / displayRun.totalRounds) * 100
-    : 0;
+  const onEnterRun = () => {
+    navigate('/game');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle p-4 md:p-8">
+    <div className="grid grid-cols-12 gap-6 h-full p-8 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar">
       {/* Header */}
-      <div className="max-w-6xl mx-auto mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-4xl font-bold mb-2 text-foreground">🎮 Instinct.fi</h1>
-            <p className="text-muted-foreground">Gamified community trading on Solana</p>
+      <div className="col-span-12 flex justify-between items-end border-b border-zinc-800 pb-6">
+        <div>
+          <h1 className="text-4xl font-light tracking-tighter text-white mb-2 font-display">
+            INSTINCT <span className="text-indigo-500 font-bold">PROTOCOL_</span>
+          </h1>
+          <div className="flex gap-4 text-xs font-mono text-zinc-500">
+            <span className="flex items-center gap-2"><span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/> SYSTEM ONLINE</span>
+            <span>EPOCH: 42.0.1</span>
+            <span>GAS: 14 GWEI</span>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => navigate('/profile')}
-            className="shadow-soft-sm"
-          >
-            Profile
-          </Button>
         </div>
-
-        {/* User Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.xp}</div>
-              <div className="text-sm text-muted-foreground">Total XP</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.totalRuns}</div>
-              <div className="text-sm text-muted-foreground">Runs Joined</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.winRate}%</div>
-              <div className="text-sm text-muted-foreground">Win Rate</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{currentUser.badges.length}</div>
-              <div className="text-sm text-muted-foreground">Badges</div>
-            </CardContent>
-          </Card>
+        <div className="flex gap-6 text-right">
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Net Asset Value</div>
+            <div className="text-2xl font-mono text-white">$2,450.00 <span className="text-emerald-500 text-sm">(+12%)</span></div>
+          </div>
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase tracking-widest">Global Rank</div>
+            <div className="text-2xl font-mono text-indigo-400">#842</div>
+          </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Active/Waiting Run Card */}
-          <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl flex items-center gap-2 text-foreground">
-                  {getRunStatusEmoji(displayRun.status)} Run #{displayRun.id}
-                </CardTitle>
-                <Badge
-                  variant={isActive ? 'default' : 'secondary'}
-                  className={
-                    isActive
-                      ? 'bg-red-500/10 text-red-600 border-red-500/30'
-                      : 'bg-primary/10 text-primary border-primary/30'
-                  }
-                >
-                  {displayRun.status.toUpperCase()}
-                </Badge>
+      {/* Main Feed */}
+      <div className="col-span-12 lg:col-span-8 space-y-6">
+        {/* Featured Run */}
+        <Panel className="p-8 group hover:border-indigo-500/50 transition-colors cursor-pointer relative overflow-hidden" onClick={onEnterRun}>
+          <div className="absolute top-0 right-0 p-4 text-xs font-mono text-indigo-400 border-b border-l border-zinc-800 bg-zinc-900/50">
+            STATUS: {activeRun.status.toUpperCase()} [{activeRun.currentRound}/{activeRun.totalRounds}]
+          </div>
+          <div className="flex items-center gap-6 mb-8">
+            <div className="w-16 h-16 border border-indigo-500/30 bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+              <Zap size={32} strokeWidth={1.5} />
+            </div>
+            <div>
+              <h2 className="text-3xl text-white font-light mb-1">{activeRun.coin}-PERP <span className="text-zinc-600">/</span> USDC</h2>
+              <div className="flex gap-3 text-sm font-mono">
+                <span className="text-[#00F0FF]">VOLATILITY: HIGH</span>
+                <span className="text-zinc-500">|</span>
+                <span className="text-emerald-400">YIELD: +24%</span>
               </div>
-              <CardDescription>
-                {isActive
-                  ? `Trading ${displayRun.tradingPair}`
-                  : 'Waiting for game to start'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Pool Info */}
-              <div className="bg-muted rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Coins className="w-4 h-4" />
-                    Total Pool
-                  </span>
-                  <span className="text-2xl font-bold text-foreground">
-                    {formatUSDC(displayRun.totalPool)} USDC
-                  </span>
-                </div>
+            </div>
+          </div>
 
-                {isActive && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Profit/Loss</span>
-                    <span
-                      className={`font-bold ${
-                        isProfit ? 'text-success' : 'text-destructive'
-                      }`}
-                    >
-                      {isProfit ? '+' : ''}
-                      {formatUSDC(profitLoss)} USDC ({isProfit ? '+' : ''}
-                      {profitLossPercent}%)
-                    </span>
-                  </div>
-                )}
+          <div className="grid grid-cols-3 gap-4 mb-8">
+             {[
+               { label: "Pool Size", val: `$${formatUSDC(activeRun.totalPool)}`, icon: Box },
+               { label: "Active Nodes", val: activeRun.participantCount.toString(), icon: Cpu },
+               { label: "Consensus", val: "83%", icon: Activity }
+             ].map((stat, i) => (
+               <div key={i} className="bg-zinc-900/50 p-4 border border-zinc-800/50">
+                 <div className="flex items-center gap-2 text-zinc-500 text-[10px] uppercase mb-2">
+                   <stat.icon size={12} /> {stat.label}
+                 </div>
+                 <div className="text-lg font-mono text-zinc-200">{stat.val}</div>
+               </div>
+             ))}
+          </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Players
-                  </span>
-                  <span className="font-medium text-foreground">
-                    {displayRun.participantCount} / {displayRun.maxParticipants}
-                  </span>
-                </div>
+          <div className="flex justify-between items-center">
+            <div className="flex -space-x-2">
+               {[1,2,3,4].map(i => (
+                 <div key={i} className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-500">
+                    U{i}
+                 </div>
+               ))}
+               <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-400">
+                 +{activeRun.participantCount > 4 ? activeRun.participantCount - 4 : 0}
+               </div>
+            </div>
+            <Button variant="primary" className="pl-8 pr-8">
+               Initialize Link <ChevronRight size={14} className="ml-2" />
+            </Button>
+          </div>
+          
+          <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl pointer-events-none" />
+        </Panel>
+
+        {/* Secondary Feeds */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <Panel className="p-6 min-h-[200px] flex flex-col justify-between hover:bg-zinc-900/30 transition-colors">
+              <div className="flex justify-between items-start">
+                 <div>
+                    <Badge label="Queued" color="zinc" />
+                    <h3 className="text-xl mt-3 text-zinc-300">BTC-PERP</h3>
+                 </div>
+                 <Terminal size={20} className="text-zinc-600" />
               </div>
-
-              {/* Progress */}
-              {isActive && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="font-medium text-foreground">
-                      Round {displayRun.currentRound} / {displayRun.totalRounds}
-                    </span>
-                  </div>
-                  <Progress value={progress} className="h-2" />
-                </div>
-              )}
-
-              {/* Countdown */}
-              <div className="bg-muted rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    {isActive ? 'Next Vote Closes' : 'Game Starts'}
-                  </span>
-                  <span className="text-xl font-mono font-bold text-primary">
-                    {formatTime(displayRun.countdown || 0)}
-                  </span>
-                </div>
+              <div className="space-y-2">
+                 <div className="w-full bg-zinc-900 h-1">
+                    <div className="bg-zinc-700 h-full w-3/4" />
+                 </div>
+                 <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
+                    <span>FILLING...</span>
+                    <span>75%</span>
+                 </div>
               </div>
-
-              {/* Your Participation */}
-              {isParticipating && (
-                <div className="bg-success/10 border border-success/30 rounded-lg p-4">
-                  <div className="text-sm text-muted-foreground mb-1">Your Deposit</div>
-                  <div className="text-xl font-bold text-success">
-                    {formatUSDC(userParticipation.depositAmount)} USDC
-                  </div>
-                  {isActive && (
-                    <div className="mt-2 text-sm">
-                      <span className="text-muted-foreground">Votes: </span>
-                      <span className="text-success font-medium">
-                        {userParticipation.votesCorrect} / {userParticipation.totalVotes}{' '}
-                        correct
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Action Button */}
-              <Button
-                className="w-full font-bold text-lg py-6 shadow-soft-md hover:shadow-soft-lg transition-all"
-                style={{ background: 'var(--gradient-primary)' }}
-                onClick={() =>
-                  navigate(isActive ? '/game' : isWaiting ? '/lobby' : '/game')
-                }
-              >
-                {isParticipating
-                  ? isActive
-                    ? 'Join Game →'
-                    : 'View Lobby →'
-                  : isWaiting
-                  ? 'Join Run →'
-                  : 'Spectate →'}
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* How It Works */}
-          <Card className="card-elevated">
-            <CardHeader>
-              <CardTitle className="text-xl text-foreground">🎯 How It Works</CardTitle>
-              <CardDescription>ELI5 Trading Made Simple</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                    1
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Join a Run</div>
-                    <div className="text-sm text-muted-foreground">
-                      Deposit 10-100 USDC during waiting phase
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary/10 text-secondary flex items-center justify-center font-bold">
-                    2
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Vote Together</div>
-                    <div className="text-sm text-muted-foreground">
-                      Every 10 minutes: Buy, Sell, or Skip
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-success/10 text-success flex items-center justify-center font-bold">
-                    3
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Share Outcomes</div>
-                    <div className="text-sm text-muted-foreground">
-                      Win or lose together, earn XP and badges
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-warning/10 text-warning flex items-center justify-center font-bold">
-                    4
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Collect Rewards</div>
-                    <div className="text-sm text-muted-foreground">
-                      Withdraw your share after 2 hours
-                    </div>
-                  </div>
-                </div>
+           </Panel>
+           
+           <Panel className="p-6 min-h-[200px] flex flex-col justify-between border-dashed border-zinc-800 opacity-60">
+              <div className="flex justify-between items-start">
+                 <div>
+                    <Badge label="Locked" color="red" />
+                    <h3 className="text-xl mt-3 text-zinc-500">ETH-CORE</h3>
+                 </div>
+                 <Shield size={20} className="text-zinc-700" />
               </div>
-
-              <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 mt-4">
-                <div className="flex items-start gap-2">
-                  <TrendingUp className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-warning text-sm">
-                      Chaos Mode Active!
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Random leverage (1x-20x) and position size (10%-100%) each
-                      round. Embrace the chaos! 🎲
-                    </div>
-                  </div>
-                </div>
+              <div className="text-xs text-zinc-600 font-mono">
+                 REQUIRED CLEARANCE: LVL 15
               </div>
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => navigate('/history')}
-              >
-                View Past Runs
-              </Button>
-            </CardContent>
-          </Card>
+           </Panel>
         </div>
+      </div>
 
-        {/* Recent Badges */}
-        {currentUser.badges.length > 0 && (
-          <Card className="mt-6 card-elevated">
-            <CardHeader>
-              <CardTitle className="text-xl text-foreground">🏆 Your Recent Badges</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {currentUser.badges.map((badge) => (
-                  <div
-                    key={badge.id}
-                    className="bg-gradient-to-br from-warning/10 to-warning/5 border border-warning/30 rounded-lg p-4 shadow-soft-sm"
-                  >
-                    <div className="text-4xl mb-2">{badge.emoji}</div>
-                    <div className="font-bold text-warning">{badge.name}</div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      {badge.description}
-                    </div>
-                    <div className="text-xs text-muted-foreground/70 mt-2">
-                      {badge.earnedAt.toLocaleDateString()}
-                    </div>
+      {/* Sidebar */}
+      <div className="col-span-12 lg:col-span-4 space-y-6">
+         <Panel className="p-6">
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+               <Layers size={14} /> Protocol History
+            </h3>
+            <div className="space-y-3">
+               {runHistory.slice(0, 5).map((run, i) => (
+                  <div key={i} className="flex justify-between items-center text-sm border-b border-zinc-800/50 pb-2 last:border-0">
+                     <div className="flex items-center gap-3">
+                        <div className={`w-1.5 h-1.5 rounded-full ${run.totalPool >= run.startingPool ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        <span className="font-mono text-zinc-400">#{run.id} {run.tradingPair}</span>
+                     </div>
+                     <div className={`font-mono ${run.totalPool >= run.startingPool ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {run.totalPool >= run.startingPool ? '+' : ''}{((run.totalPool - run.startingPool) / run.startingPool * 100).toFixed(1)}%
+                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+               ))}
+            </div>
+         </Panel>
+         
+         <Panel className="p-6 bg-gradient-to-b from-zinc-900 to-zinc-950 border-indigo-500/20">
+            <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+               <Target size={14} /> Daily Quests
+            </h3>
+            <ul className="space-y-4">
+               <li className="text-sm">
+                  <div className="flex justify-between mb-1 text-zinc-300">
+                     <span>Consensus Master</span>
+                     <span className="text-indigo-400">3/5</span>
+                  </div>
+                  <div className="w-full bg-zinc-900 h-1.5">
+                     <div className="bg-indigo-500 h-full w-3/5 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                  </div>
+               </li>
+               <li className="text-sm">
+                  <div className="flex justify-between mb-1 text-zinc-300">
+                     <span>Diamond Hand</span>
+                     <span className="text-indigo-400">Completed</span>
+                  </div>
+                  <div className="w-full bg-zinc-900 h-1.5">
+                     <div className="bg-emerald-500 h-full w-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                  </div>
+               </li>
+            </ul>
+         </Panel>
       </div>
     </div>
   );
-}
+};
 
-//update here
+export default Dashboard;

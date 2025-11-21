@@ -1,320 +1,93 @@
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { currentUser, runHistory, formatUSDC } from '@/lib/mockData';
-import {
-  ArrowLeft,
-  Trophy,
-  TrendingUp,
-  Target,
-  Award,
-  Calendar,
-  Star,
-} from 'lucide-react';
+import React from 'react';
+import { User, Shield, Wifi, Database, Cpu, Hexagon, Lock } from 'lucide-react';
+import { Panel } from '@/components/ui/instinct/Panel';
+import { Button } from '@/components/ui/instinct/Button';
+import { currentUser, formatUSDC } from '@/lib/mockData';
 
-export default function Profile() {
-  const navigate = useNavigate();
+const Profile = () => {
+  // Hardcoded Augments from sample.tsx
+  const augments = [
+     { name: "Neural Link I", type: "PASSIVE", desc: "View order book depth for 5s", active: true },
+     { name: "Fee Override", type: "ECONOMY", desc: "-10% Protocol fees", active: true },
+     { name: "Flash Loan", type: "ACTIVE", desc: "Access 10x leverage once per epoch", active: false },
+  ];
 
-  // Calculate stats
-  const totalProfit = 15400; // Mock total profit across all runs
-  const nextLevelXP = 3000;
-  const xpProgress = (currentUser.xp / nextLevelXP) * 100;
-  const userLevel = Math.floor(currentUser.xp / 1000) + 1;
+  // Calculate total PnL mock
+  const totalPnL = 450.20; // Mock value or derive from history if possible
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Header */}
-      <div className="bg-card border-b border-border px-4 py-3 shadow-soft-sm">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div className="text-center">
-            <div className="font-bold text-foreground">Profile</div>
+    <div className="p-8 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar">
+       {/* Profile Header */}
+       <div className="relative h-48 mb-20">
+          <div className="absolute inset-0 bg-gradient-to-r from-zinc-900 to-black border-b border-zinc-800" />
+          <div className="absolute -bottom-12 left-8 flex items-end gap-6">
+             <Panel className="w-32 h-32 flex items-center justify-center bg-black border-2 border-zinc-700 shadow-2xl">
+                <User size={48} className="text-zinc-500" />
+             </Panel>
+             <div className="mb-4">
+                <h1 className="text-4xl font-light text-white font-display mb-1">OPERATOR <span className="text-indigo-500 font-bold">#{currentUser.id.split('-')[1] || '842'}</span></h1>
+                <div className="flex gap-4 text-xs font-mono text-zinc-400">
+                   <span className="flex items-center gap-1"><Shield size={12} /> CLEARANCE: LEVEL 4</span>
+                   <span className="flex items-center gap-1 text-emerald-500"><Wifi size={12} /> CONNECTED</span>
+                </div>
+             </div>
           </div>
-          <div className="w-20"></div>
-        </div>
-      </div>
+       </div>
 
-      <div className="max-w-6xl mx-auto p-4 space-y-6">
-        {/* Profile Hero */}
-        <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-          <CardContent className="p-8">
-            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-              {/* Avatar */}
-              <div className="relative">
-                <div className="w-32 h-32 rounded-full flex items-center justify-center text-6xl" style={{ background: 'var(--gradient-primary)' }}>
-                  🥷
-                </div>
-                <div className="absolute -bottom-2 -right-2 bg-warning text-white font-bold rounded-full w-12 h-12 flex items-center justify-center text-lg border-4 border-background">
-                  {userLevel}
-                </div>
-              </div>
+       <div className="grid grid-cols-12 gap-8">
+          {/* Stats Matrix */}
+          <div className="col-span-12 lg:col-span-4 space-y-6">
+             <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <Database size={14} /> Performance Matrix
+             </h3>
+             <div className="grid grid-cols-2 gap-4">
+                {[
+                   { label: "Total PnL", val: `+$${formatUSDC(totalPnL * 1000)}`, color: "text-emerald-400" },
+                   { label: "Win Rate", val: `${currentUser.winRate}%`, color: "text-indigo-400" },
+                   { label: "Total Epochs", val: currentUser.totalRuns.toString(), color: "text-white" },
+                   { label: "Avg Leverage", val: "4.5x", color: "text-zinc-400" },
+                ].map((stat, i) => (
+                   <Panel key={i} className="p-4">
+                      <div className="text-[10px] text-zinc-500 uppercase mb-1">{stat.label}</div>
+                      <div className={`text-xl font-mono ${stat.color}`}>{stat.val}</div>
+                   </Panel>
+                ))}
+             </div>
+          </div>
 
-              {/* User Info */}
-              <div className="flex-1 text-center md:text-left">
-                <h1 className="text-4xl font-bold mb-2 text-foreground">{currentUser.username}</h1>
-                <div className="text-muted-foreground mb-4 font-mono text-sm">
-                  {currentUser.walletAddress}
-                </div>
-
-                {/* XP Progress */}
-                <div className="max-w-md">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">Level {userLevel}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {currentUser.xp} / {nextLevelXP} XP
-                    </span>
-                  </div>
-                  <Progress value={xpProgress} className="h-3" />
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {nextLevelXP - currentUser.xp} XP until level {userLevel + 1}
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-success">
-                    +{formatUSDC(totalProfit)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Total Profit</div>
-                </div>
-                <div className="bg-muted rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-primary">
-                    {currentUser.badges.length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Badges</div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Stats Grid */}
-        <div className="grid md:grid-cols-4 gap-4">
-          <Card className="card-elevated">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <Trophy className="w-5 h-5 text-warning" />
-                <span className="text-muted-foreground text-sm">Total Runs</span>
-              </div>
-              <div className="text-3xl font-bold text-foreground">{currentUser.totalRuns}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <TrendingUp className="w-5 h-5 text-success" />
-                <span className="text-muted-foreground text-sm">Win Rate</span>
-              </div>
-              <div className="text-3xl font-bold text-success">
-                {currentUser.winRate}%
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <Target className="w-5 h-5 text-primary" />
-                <span className="text-muted-foreground text-sm">Total XP</span>
-              </div>
-              <div className="text-3xl font-bold text-primary">
-                {currentUser.xp}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <Award className="w-5 h-5 text-secondary" />
-                <span className="text-muted-foreground text-sm">Badges</span>
-              </div>
-              <div className="text-3xl font-bold text-secondary">
-                {currentUser.badges.length}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Badges Collection */}
-        <Card className="card-elevated">
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2 text-foreground">
-              <Award className="w-6 h-6 text-warning" />
-              Badge Collection
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-3 gap-4">
-              {currentUser.badges.map((badge) => (
-                <div
-                  key={badge.id}
-                  className="bg-warning/10 border-2 border-warning/50 rounded-lg p-6 shadow-soft-sm"
-                >
-                  <div className="text-6xl mb-3 text-center">{badge.emoji}</div>
-                  <div className="text-center">
-                    <div className="font-bold text-lg text-warning mb-2">
-                      {badge.name}
-                    </div>
-                    <div className="text-sm text-muted-foreground mb-3">
-                      {badge.description}
-                    </div>
-                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                      <Calendar className="w-3 h-3" />
-                      {badge.earnedAt.toLocaleDateString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {currentUser.badges.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                <div className="text-6xl mb-4">🏆</div>
-                <div className="text-lg text-foreground">No badges yet!</div>
-                <div className="text-sm">
-                  Participate in runs to earn your first badge
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Run History */}
-        <Card className="card-elevated">
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2 text-foreground">
-              <Star className="w-6 h-6 text-primary" />
-              Recent Runs
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {runHistory.map((run) => {
-                const profitLoss = run.totalPool - run.startingPool;
-                const profitLossPercent = (
-                  (profitLoss / run.startingPool) *
-                  100
-                ).toFixed(1);
-                const isProfit = profitLoss >= 0;
-
-                return (
-                  <div
-                    key={run.id}
-                    className="bg-muted rounded-lg p-4 flex items-center justify-between hover:bg-muted/70 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white" style={{ background: 'var(--gradient-primary)' }}>
-                        #{run.id}
+          {/* Augments / Loadout */}
+          <div className="col-span-12 lg:col-span-8 space-y-6">
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                   <Cpu size={14} /> Installed Augments (3/5)
+                </h3>
+                <Button variant="neutral" className="py-1 px-3 text-[10px]">Manage Loadout</Button>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {augments.map((aug, i) => (
+                   <Panel key={i} className={`p-5 flex flex-col justify-between h-40 group ${aug.active ? 'border-indigo-500/30' : 'border-zinc-800 opacity-50'}`}>
+                      <div className="flex justify-between items-start">
+                         <Hexagon size={24} className={aug.active ? 'text-indigo-500' : 'text-zinc-600'} />
+                         {aug.active ? <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" /> : <Lock size={14} className="text-zinc-600" />}
                       </div>
                       <div>
-                        <div className="font-bold text-foreground">{run.tradingPair}</div>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Calendar className="w-3 h-3" />
-                          {run.endedAt?.toLocaleDateString()}
-                        </div>
+                         <div className="text-[10px] text-zinc-500 mb-1">{aug.type}</div>
+                         <h4 className={`text-lg font-display mb-2 ${aug.active ? 'text-white' : 'text-zinc-500'}`}>{aug.name}</h4>
+                         <p className="text-xs text-zinc-400 leading-tight">{aug.desc}</p>
                       </div>
-                    </div>
-
-                    <div className="text-right">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          className={
-                            isProfit
-                              ? 'bg-success/10 text-success border-success/50'
-                              : 'bg-destructive/10 text-destructive border-destructive/50'
-                          }
-                        >
-                          {isProfit ? '🟢' : '🔴'} {isProfit ? 'WIN' : 'LOSS'}
-                        </Badge>
-                      </div>
-                      <div
-                        className={`text-lg font-bold mt-1 ${
-                          isProfit ? 'text-success' : 'text-destructive'
-                        }`}
-                      >
-                        {isProfit ? '+' : ''}
-                        {profitLossPercent}%
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {run.participantCount} players
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {runHistory.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                <div className="text-6xl mb-4">📊</div>
-                <div className="text-lg text-foreground">No run history yet!</div>
-                <div className="text-sm">Join your first run to get started</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Achievements Progress */}
-        <Card className="card-elevated">
-          <CardHeader>
-            <CardTitle className="text-xl text-foreground">🎯 Achievement Progress</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-foreground">Win 10 Runs</span>
-                <span className="text-sm text-muted-foreground">7/10</span>
-              </div>
-              <Progress value={70} className="h-2" />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-foreground">Earn 5,000 XP</span>
-                <span className="text-sm text-muted-foreground">
-                  {currentUser.xp}/5000
-                </span>
-              </div>
-              <Progress value={(currentUser.xp / 5000) * 100} className="h-2" />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-foreground">Collect 10 Badges</span>
-                <span className="text-sm text-muted-foreground">
-                  {currentUser.badges.length}/10
-                </span>
-              </div>
-              <Progress
-                value={(currentUser.badges.length / 10) * 100}
-                className="h-2"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-foreground">100% Vote Accuracy</span>
-                <span className="text-sm text-muted-foreground">83%</span>
-              </div>
-              <Progress value={83} className="h-2" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                   </Panel>
+                ))}
+                <Panel className="p-5 flex flex-col justify-center items-center h-40 border-dashed border-zinc-800 text-zinc-700">
+                   <Lock size={24} className="mb-2" />
+                   <span className="text-xs uppercase">Slot Locked</span>
+                   <span className="text-[10px] mt-1">Req Lvl 5</span>
+                </Panel>
+             </div>
+          </div>
+       </div>
     </div>
   );
-}
+};
 
+export default Profile;

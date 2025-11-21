@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AppLayout from "./components/AppLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import ActiveGame from "./pages/ActiveGame";
@@ -21,16 +22,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Landing Page */}
+          {/* Landing Page - No Layout */}
           <Route path="/" element={<Index />} />
           
-          {/* App Routes */}
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/game" element={<ActiveGame />} />
-          <Route path="/lobby" element={<Lobby />} />
-          <Route path="/results" element={<Results />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/history" element={<History />} />
+          {/* App Routes - With Layout */}
+          <Route path="/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+          <Route path="/game" element={<AppLayout><ActiveGame /></AppLayout>} />
+          <Route path="/lobby" element={<AppLayout><Lobby /></AppLayout>} />
+          <Route path="/results" element={<AppLayout><Results /></AppLayout>} />
+          <Route path="/profile" element={<AppLayout><Profile /></AppLayout>} />
+          <Route path="/history" element={<AppLayout><History /></AppLayout>} />
           
           {/* Catch-all route */}
           <Route path="*" element={<NotFound />} />
