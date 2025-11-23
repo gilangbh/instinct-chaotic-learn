@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,11 +17,16 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRuns } from '@/hooks/useApi';
+import { buildWithdrawTransaction, getNumericRunId } from '@/lib/solana-deposit';
+import { api } from '@/lib/api';
 
 export default function Results() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
   const { user } = useAuth();
+  const { publicKey, sendTransaction, connected } = useWallet();
+  const { connection } = useConnection();
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // Redirect to dashboard if no runId provided
   if (!runId) {
@@ -28,7 +35,7 @@ export default function Results() {
   }
 
   // Fetch run data from API
-  const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId);
+  const { data: runResponse, isLoading: runLoading, refetch: refetchRun } = useRuns.useGetRun(runId);
   const { data: tradesResponse } = useRuns.useGetRunTrades(runId);
 
   // Extract run data
@@ -71,13 +78,82 @@ export default function Results() {
     ? ((userProfit / userParticipation.depositAmount) * 100).toFixed(1)
     : '0';
 
-  const handleWithdraw = () => {
-    toast.success('Funds withdrawn!', {
-      description: `${formatUSDC(
-        userParticipation?.finalShare || 0
-      )} USDC sent to your wallet`,
-    });
-    // TODO: Implement actual withdrawal via Solana
+  const handleWithdraw = async () => {
+    if (!publicKey || !connected) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    if (!userParticipation) {
+      toast.error('You are not a participant in this run');
+      return;
+    }
+
+    if (userParticipation.withdrawn) {
+      toast.error('You have already withdrawn from this run');
+      return;
+    }
+
+    setIsWithdrawing(true);
+
+    try {
+      // Get numeric run ID
+      const numericRunId = getNumericRunId(runId || '', run?.createdAt);
+
+      // Build withdraw transaction
+      const transaction = await buildWithdrawTransaction(
+        numericRunId,
+        publicKey
+      );
+
+      // Send transaction for user to sign
+      toast.info('Please approve the transaction in your wallet');
+      const signature = await sendTransaction(transaction, connection, {
+        skipPreflight: false,
+      });
+
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, 'confirmed');
+      toast.success('Transaction confirmed!', {
+        description: `Withdraw transaction: ${signature.slice(0, 8)}...`,
+      });
+
+      // Call backend API to verify and update database
+      try {
+        await api.runs.withdraw(runId || '', {
+          userWalletAddress: publicKey.toString(),
+          walletSignature: signature,
+        });
+
+        toast.success('Funds withdrawn!', {
+          description: `${formatUSDC(
+            userParticipation?.finalShare || 0
+          )} USDC sent to your wallet`,
+        });
+
+        // Refetch run data to update UI
+        await refetchRun();
+      } catch (apiError: any) {
+        console.error('Error calling withdraw API:', apiError);
+        toast.error('Withdraw transaction succeeded but backend verification failed', {
+          description: apiError.message || 'Please contact support',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error withdrawing:', error);
+      
+      if (error.message?.includes('User rejected')) {
+        toast.error('Transaction cancelled');
+      } else if (error.message?.includes('insufficient funds')) {
+        toast.error('Insufficient SOL for transaction fees');
+      } else {
+        toast.error('Failed to withdraw', {
+          description: error.message || 'Please try again',
+        });
+      }
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   const handlePlayAgain = () => {
@@ -486,9 +562,10 @@ export default function Results() {
               className="font-bold text-lg py-6 shadow-soft-md"
               style={{ background: 'linear-gradient(to right, hsl(var(--success)), hsl(142 71% 40%))' }}
               onClick={handleWithdraw}
+              disabled={isWithdrawing || !connected || !publicKey}
             >
               <Download className="mr-2 w-5 h-5" />
-              Withdraw {formatUSDC(userParticipation.finalShare || 0)} USDC
+              {isWithdrawing ? 'Processing...' : `Withdraw ${formatUSDC(userParticipation.finalShare || 0)} USDC`}
             </Button>
             <Button
               size="lg"

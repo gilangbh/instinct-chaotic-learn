@@ -743,8 +743,8 @@ export default function ActiveGame() {
                           }
                           
                           return (
-                            <div
-                              className={`font-bold text-lg ${
+                      <div
+                        className={`font-bold text-lg ${
                                 userTotalPnL >= 0 ? 'text-success' : 'text-destructive'
                               }`}
                             >

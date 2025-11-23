@@ -16,11 +16,20 @@ interface SolanaWalletProviderProps {
 }
 
 export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({ children }) => {
-  // Use devnet
+  // Use devnet (or custom RPC from env)
   const network = WalletAdapterNetwork.Devnet;
 
-  // You can also provide a custom RPC endpoint
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  // Use custom RPC URL from env if available, otherwise use cluster API URL
+  const endpoint = useMemo(() => {
+    const customRpc = import.meta.env.VITE_SOLANA_RPC_URL;
+    if (customRpc) {
+      console.log('🌐 Using custom RPC endpoint:', customRpc);
+      return customRpc;
+    }
+    const clusterUrl = clusterApiUrl(network);
+    console.log('🌐 Using cluster RPC endpoint:', clusterUrl);
+    return clusterUrl;
+  }, [network]);
 
   // Configure supported wallets
   const wallets = useMemo(

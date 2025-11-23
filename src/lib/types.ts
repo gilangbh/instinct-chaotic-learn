@@ -172,6 +172,7 @@ export interface UpdateUserRequest {
 export interface JoinRunRequest {
   depositAmount: number;
   walletSignature?: string;
+  userWalletAddress?: string; // Solana wallet address for on-chain deposit
 }
 
 export interface CastVoteRequest {

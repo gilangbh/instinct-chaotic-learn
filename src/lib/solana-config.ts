@@ -11,9 +11,9 @@ export const solanaConfig = {
   rpcUrl: import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
   
   // Program ID (Instinct Trading Program)
-  programId: import.meta.env.VITE_SOLANA_PROGRAM_ID || '7gmTYKqNX4xKsrd6NfNRscL3XSUoUTQyyTPhySWoABUc',
+  programId: import.meta.env.VITE_SOLANA_PROGRAM_ID || '83TVAu61Hv4v7zvPszszYFJLTwARG5LPhoTbGnkEmaQD',
   
-  // USDC Mint Address (Devnet USDC)
+  // USDC Mint Address (Devnet USDC - valid token mint)
   usdcMint: import.meta.env.VITE_USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
   
   // Community Wallet (where deposits go)

@@ -140,11 +140,15 @@ export const api = {
     create: (data: any) => apiClient.post<Run>('/runs', data),
     join: (id: string, data: JoinRunRequest) => apiClient.post<any>(`/runs/${id}/join`, data),
     leave: (id: string) => apiClient.delete(`/runs/${id}/leave`),
+    withdraw: (id: string, data: { userWalletAddress?: string; walletSignature?: string }) => 
+      apiClient.post<any>(`/runs/${id}/withdraw`, data),
     vote: (id: string, data: CastVoteRequest & { round: number }) => apiClient.post(`/runs/${id}/vote`, data),
     getParticipants: (id: string) => apiClient.get<any[]>(`/runs/${id}/participants`),
     getTrades: (id: string) => apiClient.get<any[]>(`/runs/${id}/trades`),
     getUnrealizedPnL: (id: string, round: number) => apiClient.get<{ unrealizedPnL: number | null }>(`/runs/${id}/trades/${round}/unrealized-pnl`),
     getCurrentVotingRound: (id: string) => apiClient.get<any>(`/runs/${id}/voting-round`),
+    mintTestUsdc: (walletAddress: string, amount: number = 1000) => 
+      apiClient.post<{ signature: string; amount: number; walletAddress: string }>('/runs/mint-test-usdc', { walletAddress, amount }),
   },
 
   // Market data endpoints

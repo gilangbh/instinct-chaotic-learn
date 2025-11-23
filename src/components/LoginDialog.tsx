@@ -10,6 +10,7 @@ import { Wallet, User as UserIcon, Loader2, RotateCcw, ExternalLink, CheckCircle
 import bs58 from 'bs58';
 import { api } from '@/lib/api';
 import { generateUsername } from '@/lib/usernameGenerator';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 interface LoginDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ interface WalletInfo {
 export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const { login, loginWithWallet } = useAuth();
   const navigate = useNavigate();
+  const { publicKey, wallet: currentWallet, connect, disconnect, connected, connecting, wallets } = useWallet();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [usernameForWallet, setUsernameForWallet] = useState('');
@@ -93,82 +95,164 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       setIsLoading(true);
       setError('');
       
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      
-      let provider;
-      if (wallet.name === 'Phantom') {
-        provider = (window as any).solana;
-      } else if (wallet.name === 'Solflare') {
-        provider = (window as any).solflare;
-      } else if (wallet.name === 'Backpack') {
-        provider = (window as any).backpack;
-      } else if (wallet.name === 'Sollet') {
-        provider = (window as any).sollet;
+      // Find the wallet adapter from the context
+      const walletAdapter = wallets.find(w => {
+        const adapterName = w.adapter.name;
+        return (wallet.name === 'Phantom' && adapterName === 'Phantom') ||
+               (wallet.name === 'Solflare' && adapterName === 'Solflare');
+      });
+
+      if (!walletAdapter) {
+        throw new Error(`${wallet.name} wallet adapter not found. Please refresh the page.`);
       }
 
-      // For mobile, try to connect or redirect to wallet app
-      if (isMobile && !provider) {
-        // Try deep link to wallet app
-        const deepLinks = {
-          'Phantom': 'phantom://browse',
-          'Solflare': 'solflare://browse',
-          'Backpack': 'backpack://browse'
-        };
+      // Disconnect current wallet if connected to a different one
+      if (connected && currentWallet && currentWallet.adapter.name !== walletAdapter.adapter.name) {
+        try {
+          await disconnect();
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (disconnectErr) {
+          console.warn('Error disconnecting:', disconnectErr);
+        }
+      }
+
+      // If already connected to the same wallet, use it
+      if (connected && currentWallet && currentWallet.adapter.name === walletAdapter.adapter.name && publicKey) {
+        const publicKeyStr = publicKey.toString();
+        console.log('Already connected to', wallet.name, publicKeyStr);
         
-        const deepLink = deepLinks[wallet.name as keyof typeof deepLinks];
-        if (deepLink) {
-          window.location.href = deepLink;
-          setError(`Opening ${wallet.name} app... If it doesn't open, please install ${wallet.name} from the app store.`);
-          setIsLoading(false);
-          return;
+        let provider: any = null;
+        if (wallet.name === 'Phantom' && (window as any).solana?.isPhantom) {
+          provider = (window as any).solana;
+        } else if (wallet.name === 'Solflare' && (window as any).solflare) {
+          provider = (window as any).solflare;
+        }
+
+        setConnectedWallet({
+          provider,
+          publicKey: publicKeyStr,
+          walletName: wallet.name
+        });
+        setSelectedWallet(wallet);
+        
+        setIsCheckingWallet(true);
+        try {
+          const response = await api.users.getByWallet(publicKeyStr);
+          if (response.success && response.data) {
+            setExistingUser(response.data);
+          } else {
+            setExistingUser(null);
+          }
+        } catch (err) {
+          setExistingUser(null);
+        } finally {
+          setIsCheckingWallet(false);
+        }
+        
+        setIsLoading(false);
+        return;
+      }
+
+      // Connect using the wallet adapter from context
+      console.log(`Connecting to ${wallet.name} via wallet adapter...`);
+      
+      // Check if wallet is installed by checking window provider directly (more reliable)
+      let windowProvider: any = null;
+      if (wallet.name === 'Phantom') {
+        windowProvider = (window as any).solana;
+        if (!windowProvider || !windowProvider.isPhantom) {
+          throw new Error('Phantom wallet is not installed. Please install Phantom and refresh the page.');
+        }
+        // Wait a moment for Phantom to fully initialize
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } else if (wallet.name === 'Solflare') {
+        windowProvider = (window as any).solflare;
+        if (!windowProvider) {
+          throw new Error('Solflare wallet is not installed. Please install Solflare and refresh the page.');
         }
       }
 
-      if (!provider) {
-        throw new Error(`${wallet.name} wallet not found. Please install ${wallet.name} and refresh the page.`);
+      // Try connecting via adapter first (preferred method)
+      let connectionSucceeded = false;
+      try {
+        console.log('Attempting connection via wallet adapter...');
+        // Don't wait for ready state - just try to connect
+        // The adapter will handle initialization internally
+        await walletAdapter.adapter.connect();
+        connectionSucceeded = true;
+        console.log('Connection via adapter succeeded');
+      } catch (adapterErr: any) {
+        console.log('Adapter connect failed, trying direct provider...', adapterErr.message);
+        
+        // Fallback: Use direct provider connection if adapter fails
+        if (windowProvider && typeof windowProvider.connect === 'function') {
+          try {
+            console.log('Attempting direct provider connection...');
+            const response = await windowProvider.connect();
+            connectionSucceeded = true;
+            console.log('Direct provider connection succeeded', response);
+          } catch (directErr: any) {
+            console.error('Direct provider connect also failed:', directErr);
+            // Throw the more descriptive error
+            if (directErr.code === 4001 || directErr.message?.includes('User rejected')) {
+              throw new Error('Connection cancelled by user.');
+            }
+            throw new Error(`Failed to connect: ${directErr.message || adapterErr.message}`);
+          }
+        } else {
+          // If no window provider, throw adapter error
+          throw adapterErr;
+        }
       }
 
-      // Connect to wallet
-      const response = await provider.connect();
-      console.log('Wallet connection response:', response);
-      
-      // Handle different wallet response formats
-      let publicKey: string;
-      
-      if (typeof response === 'string') {
-        // Solflare might return string directly
-        publicKey = response;
-      } else if (response && response.publicKey) {
-        // Most wallets return { publicKey: ... }
-        if (typeof response.publicKey === 'string') {
-          publicKey = response.publicKey;
-        } else if (response.publicKey.toString) {
-          publicKey = response.publicKey.toString();
-        } else if (response.publicKey.toBase58) {
-          publicKey = response.publicKey.toBase58();
-        } else {
-          throw new Error('Unsupported public key format');
+      // Wait for public key to be available
+      // Check multiple sources: adapter, useWallet hook, and window provider
+      let publicKeyStr: string | null = null;
+      let attempts = 0;
+      while (attempts < 30) {
+        // Check adapter public key
+        if (walletAdapter.adapter.publicKey) {
+          publicKeyStr = walletAdapter.adapter.publicKey.toString();
+          break;
         }
-      } else if (provider.publicKey) {
-        // Some wallets store publicKey on the provider itself
-        if (typeof provider.publicKey === 'string') {
-          publicKey = provider.publicKey;
-        } else if (provider.publicKey.toString) {
-          publicKey = provider.publicKey.toString();
-        } else if (provider.publicKey.toBase58) {
-          publicKey = provider.publicKey.toBase58();
-        } else {
-          throw new Error('Unsupported public key format');
+        // Check useWallet hook public key
+        if (publicKey) {
+          publicKeyStr = publicKey.toString();
+          break;
         }
-      } else {
-        throw new Error('Unable to get public key from wallet');
+        // Check window provider public key (for direct connection)
+        if (windowProvider?.publicKey) {
+          const pk = windowProvider.publicKey;
+          if (typeof pk === 'string') {
+            publicKeyStr = pk;
+          } else if (pk.toString) {
+            publicKeyStr = pk.toString();
+          } else if (pk.toBase58) {
+            publicKeyStr = pk.toBase58();
+          }
+          if (publicKeyStr) break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
       }
-      
-      console.log('Extracted public key:', publicKey);
-      
+
+      if (!publicKeyStr) {
+        throw new Error('Connection succeeded but no public key received. Please try again.');
+      }
+
+      console.log('Connected wallet public key:', publicKeyStr);
+
+      // Get the provider for signing messages later
+      let provider: any = null;
+      if (wallet.name === 'Phantom' && (window as any).solana?.isPhantom) {
+        provider = (window as any).solana;
+      } else if (wallet.name === 'Solflare' && (window as any).solflare) {
+        provider = (window as any).solflare;
+      }
+
       setConnectedWallet({
         provider,
-        publicKey,
+        publicKey: publicKeyStr,
         walletName: wallet.name
       });
       setSelectedWallet(wallet);
@@ -176,18 +260,15 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       // Check if wallet already exists in database
       setIsCheckingWallet(true);
       try {
-        const response = await api.users.getByWallet(publicKey);
+        const response = await api.users.getByWallet(publicKeyStr);
         if (response.success && response.data) {
-          // User exists - no need to ask for username again
           setExistingUser(response.data);
           console.log('Welcome back user:', response.data);
         } else {
-          // New wallet - user will need to provide username
           setExistingUser(null);
           console.log('New wallet detected, username required');
         }
       } catch (err) {
-        // Wallet not found in database - treat as new user
         console.log('Wallet not found in database, treating as new user');
         setExistingUser(null);
       } finally {
@@ -196,7 +277,23 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       
     } catch (err: any) {
       console.error('Wallet connection error:', err);
-      setError(err.message || `Failed to connect to ${wallet.name}. Please make sure ${wallet.name} is installed and unlocked.`);
+      
+      // Provide helpful error messages
+      let errorMessage = '';
+      
+      if (err?.code === 4001 || err?.message?.includes('User rejected') || err?.message?.includes('cancelled')) {
+        errorMessage = 'Connection cancelled by user.';
+      } else if (err?.message?.includes('not found') || err?.message?.includes('not available') || err?.message?.includes('not installed')) {
+        errorMessage = `${wallet.name} wallet is not installed. Please install ${wallet.name} and refresh the page.`;
+      } else if (err?.message?.includes('locked') || err?.message?.includes('unlock')) {
+        errorMessage = 'Wallet is locked. Please unlock your wallet and try again.';
+      } else if (err?.message) {
+        errorMessage = err.message;
+      } else {
+        errorMessage = `Failed to connect to ${wallet.name}. Please make sure the wallet is installed and unlocked.`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -497,7 +594,7 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               {/* Error Message */}
               {error && (
                 <div className="bg-destructive/10 border border-destructive/30 text-destructive text-sm rounded-lg p-3">
-                  {error}
+                  <div className="whitespace-pre-line">{error}</div>
                 </div>
               )}
 
