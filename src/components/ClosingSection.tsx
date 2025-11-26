@@ -42,7 +42,8 @@ const ClosingSection = () => {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw new Error(errorBody.error || `Submission failed (${response.status})`);
+        const errorMessage = errorBody.error || errorBody.message || `Submission failed (${response.status})`;
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -51,11 +52,13 @@ const ClosingSection = () => {
         toast.success("You're on the waitlist! We'll be in touch soon.");
         setEmail("");
       } else {
-        throw new Error(data.error || "Submission failed");
+        const errorMessage = data.error || data.message || "Submission failed";
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error("Form submission error:", error);
-      toast.error("Something went wrong. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Something went wrong. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
