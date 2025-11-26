@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/instinct/Button';
+import { Panel } from '@/components/ui/instinct/Panel';
+import { Badge } from '@/components/ui/instinct/Badge';
 import { toast } from 'sonner';
 import {
   formatUSDC,
@@ -14,16 +13,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useVoteWebSocket } from '@/hooks/useVoteWebSocket';
 import {
-  ArrowUp,
-  ArrowDown,
-  SkipForward,
+  ChevronRight,
+  Activity,
+  Shield,
   TrendingUp,
   TrendingDown,
+  Terminal,
+  Globe,
+  Scan,
+  Dice5,
   Clock,
   Users,
-  Zap,
-  Target,
-  ArrowLeft,
   Loader2,
 } from 'lucide-react';
 import {

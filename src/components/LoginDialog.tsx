@@ -36,10 +36,12 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const [connectedWallet, setConnectedWallet] = useState<any>(null);
   const [existingUser, setExistingUser] = useState<any>(null);
   const [isCheckingWallet, setIsCheckingWallet] = useState(false);
+  const [isAutoAuthenticating, setIsAutoAuthenticating] = useState(false);
   const [formData, setFormData] = useState({
     walletAddress: '',
     username: '',
   });
+  const [autoLoginTriggered, setAutoLoginTriggered] = useState(false);
 
   // Detect available wallets
   const [availableWallets, setAvailableWallets] = useState<WalletInfo[]>([]);
@@ -90,6 +92,12 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     return () => window.removeEventListener('load', detectWallets);
   }, []);
 
+  useEffect(() => {
+    if (open) {
+      setAutoLoginTriggered(false);
+    }
+  }, [open]);
+
   const handleConnectWallet = async (wallet: WalletInfo) => {
     try {
       setIsLoading(true);
@@ -128,18 +136,20 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           provider = (window as any).solflare;
         }
 
-        setConnectedWallet({
+        const alreadyConnectedWallet = {
           provider,
           publicKey: publicKeyStr,
           walletName: wallet.name
-        });
+        };
+        setConnectedWallet(alreadyConnectedWallet);
         setSelectedWallet(wallet);
         
+        let cachedResponse: any = null;
         setIsCheckingWallet(true);
         try {
-          const response = await api.users.getByWallet(publicKeyStr);
-          if (response.success && response.data) {
-            setExistingUser(response.data);
+          cachedResponse = await api.users.getByWallet(publicKeyStr);
+          if (cachedResponse.success && cachedResponse.data) {
+            setExistingUser(cachedResponse.data);
           } else {
             setExistingUser(null);
           }
@@ -147,6 +157,11 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           setExistingUser(null);
         } finally {
           setIsCheckingWallet(false);
+        }
+        
+        if (!autoLoginTriggered) {
+          setAutoLoginTriggered(true);
+          await performWalletAuthentication(alreadyConnectedWallet, cachedResponse?.data ?? null);
         }
         
         setIsLoading(false);
@@ -250,29 +265,37 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         provider = (window as any).solflare;
       }
 
-      setConnectedWallet({
+      const newConnectedWallet = {
         provider,
         publicKey: publicKeyStr,
         walletName: wallet.name
-      });
+      };
+      setConnectedWallet(newConnectedWallet);
       setSelectedWallet(wallet);
       
-      // Check if wallet already exists in database
+      let cachedResponse: any = null;
       setIsCheckingWallet(true);
       try {
-        const response = await api.users.getByWallet(publicKeyStr);
-        if (response.success && response.data) {
-          setExistingUser(response.data);
-          console.log('Welcome back user:', response.data);
+        cachedResponse = await api.users.getByWallet(publicKeyStr);
+        if (cachedResponse.success && cachedResponse.data) {
+          setExistingUser(cachedResponse.data);
+          console.log('Welcome back user:', cachedResponse.data);
         } else {
           setExistingUser(null);
-          console.log('New wallet detected, username required');
+          console.log('New wallet detected, auto-generating username');
         }
       } catch (err) {
         console.log('Wallet not found in database, treating as new user');
         setExistingUser(null);
       } finally {
         setIsCheckingWallet(false);
+      }
+      
+      if (!autoLoginTriggered) {
+        setAutoLoginTriggered(true);
+        setIsAutoAuthenticating(true);
+        await performWalletAuthentication(newConnectedWallet, cachedResponse?.data ?? null);
+        setIsAutoAuthenticating(false);
       }
       
     } catch (err: any) {
@@ -307,81 +330,63 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     setError('');
   };
 
-  const handleWalletLogin = async () => {
-    if (!connectedWallet) {
+  const performWalletAuthentication = async (walletData: any, userData: any | null) => {
+    if (!walletData) {
       setError('Please connect wallet');
       return;
     }
 
-    // Use existing username or auto-generate for new users
-    const username = existingUser 
-      ? existingUser.username 
-      : generateUsername(connectedWallet.publicKey);
-
+    const username = userData ? userData.username : generateUsername(walletData.publicKey);
     setIsLoading(true);
     setError('');
 
     try {
-      // Create message to sign
-      const message = `Sign this message to authenticate with Instinct.fi\n\nWallet: ${connectedWallet.publicKey}\nUsername: ${username}\nTimestamp: ${Date.now()}`;
-      
-      console.log(existingUser ? 'Returning user authentication' : 'New user registration');
-      
-      // Request signature from wallet
+      const message = `Sign this message to authenticate with Instinct.fi\n\nWallet: ${walletData.publicKey}\nUsername: ${username}\nTimestamp: ${Date.now()}`;
       const encodedMessage = new TextEncoder().encode(message);
-      
-      console.log('Requesting signature for message:', message);
-      console.log('Encoded message:', encodedMessage);
-      
-      const signature = await connectedWallet.provider.signMessage(encodedMessage);
-      
-      console.log('Raw signature received:', signature);
-      console.log('Signature type:', typeof signature);
-      console.log('Signature constructor:', signature?.constructor?.name);
-      
-      // Handle different signature formats
+      const signature = await walletData.provider.signMessage(encodedMessage);
+
       let signatureBase58: string;
-      
       if (signature instanceof Uint8Array) {
-        // Direct Uint8Array
-        console.log('Signature is Uint8Array');
         signatureBase58 = bs58.encode(signature);
       } else if (signature && typeof signature === 'object' && signature.signature) {
-        // Phantom returns { signature: Uint8Array }
-        console.log('Signature has .signature property');
         signatureBase58 = bs58.encode(signature.signature);
       } else if (Array.isArray(signature)) {
-        // Array format
-        console.log('Signature is Array');
         signatureBase58 = bs58.encode(new Uint8Array(signature));
       } else if (signature && typeof signature === 'object') {
-        // Try to convert object to Uint8Array
-        console.log('Signature is object, converting...');
         const values = Object.values(signature);
         signatureBase58 = bs58.encode(new Uint8Array(values as number[]));
       } else {
         throw new Error(`Unsupported signature format: ${typeof signature}`);
       }
 
-      console.log('Final encoded signature:', signatureBase58);
-
-      // Call wallet login function
-      await loginWithWallet(connectedWallet.publicKey, username, message, signatureBase58);
-      
-      // Close dialog on success
+      await loginWithWallet(walletData.publicKey, username, message, signatureBase58);
       onOpenChange(false);
-      
-      // Reset form
       setUsernameForWallet('');
-      
-      // Redirect to Dashboard
       navigate('/dashboard');
     } catch (err: any) {
       console.error('Wallet login error:', err);
-      setError(err.message || 'Wallet authentication failed. Please try again.');
+      setAutoLoginTriggered(false);
+      setIsAutoAuthenticating(false);
+      
+      // Provide more helpful error messages
+      let errorMessage = 'Wallet authentication failed. Please try again.';
+      
+      if (err.message?.includes('NetworkError') || err.message?.includes('Failed to fetch') || err.message?.includes('fetch')) {
+        errorMessage = 'Unable to connect to the server. Please make sure the backend is running.';
+      } else if (err.message?.includes('User rejected') || err.message?.includes('cancelled')) {
+        errorMessage = 'Signature request was cancelled. Please try again.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleWalletLogin = async () => {
+    await performWalletAuthentication(connectedWallet, existingUser);
   };
 
 
@@ -567,62 +572,28 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
                   )}
                   
                   {/* New wallet message */}
-                  {!isCheckingWallet && !existingUser && (
+                  {!isCheckingWallet && !existingUser && !isAutoAuthenticating && (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      New wallet detected - please choose a username
+                      New wallet detected - creating account...
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Username Info - Show auto-generated username for new users */}
-              {connectedWallet && !isCheckingWallet && !existingUser && (
-                <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <UserIcon className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold text-primary">Your Username</span>
-                  </div>
-                  <div className="font-mono text-lg font-bold text-foreground">
-                    {generateUsername(connectedWallet.publicKey)}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Your unique username has been automatically generated from your wallet address
-                  </p>
+              {/* Auto-authenticating state */}
+              {connectedWallet && !isCheckingWallet && isAutoAuthenticating && (
+                <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-primary">Authenticating...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Please sign the message in your wallet</p>
                 </div>
               )}
 
               {/* Error Message */}
-              {error && (
+              {error && !isAutoAuthenticating && (
                 <div className="bg-destructive/10 border border-destructive/30 text-destructive text-sm rounded-lg p-3">
                   <div className="whitespace-pre-line">{error}</div>
                 </div>
-              )}
-
-              {/* Sign In Button */}
-              {connectedWallet && !isCheckingWallet && (
-                <Button
-                  onClick={handleWalletLogin}
-                  disabled={isLoading}
-                  className="w-full font-bold text-lg py-6 shadow-soft-md hover:shadow-soft-lg transition-all"
-                  style={{ background: 'var(--gradient-primary)' }}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Signing Message...
-                    </>
-                  ) : existingUser ? (
-                    <>
-                      <CheckCircle2 className="mr-2 h-5 w-5" />
-                      Sign to Continue
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="mr-2 h-5 w-5" />
-                      Sign & Create Account
-                    </>
-                  )}
-                </Button>
               )}
 
               {/* Info Box */}

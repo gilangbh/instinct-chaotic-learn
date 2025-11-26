@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { SolanaWalletProvider } from "@/contexts/WalletProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PublicOnlyRoute } from "@/components/PublicOnlyRoute";
+import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import ActiveGame from "./pages/ActiveGame";
@@ -49,7 +50,9 @@ const App = () => (
               path="/dashboard" 
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />
@@ -57,7 +60,9 @@ const App = () => (
               path="/game/:runId" 
               element={
                 <ProtectedRoute>
-                  <ActiveGame />
+                  <AppLayout>
+                    <ActiveGame />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />
@@ -65,7 +70,9 @@ const App = () => (
               path="/lobby/:runId" 
               element={
                 <ProtectedRoute>
-                  <Lobby />
+                  <AppLayout>
+                    <Lobby />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />
@@ -73,7 +80,9 @@ const App = () => (
               path="/results/:runId" 
               element={
                 <ProtectedRoute>
-                  <Results />
+                  <AppLayout>
+                    <Results />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />
@@ -81,7 +90,9 @@ const App = () => (
               path="/profile" 
               element={
                 <ProtectedRoute>
-                  <Profile />
+                  <AppLayout>
+                    <Profile />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />
@@ -89,7 +100,9 @@ const App = () => (
               path="/profile/:userId" 
               element={
                 <ProtectedRoute>
-                  <Profile />
+                  <AppLayout>
+                    <Profile />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />
@@ -97,7 +110,9 @@ const App = () => (
               path="/history" 
               element={
                 <ProtectedRoute>
-                  <History />
+                  <AppLayout>
+                    <History />
+                  </AppLayout>
                 </ProtectedRoute>
               } 
             />

@@ -1,512 +1,307 @@
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  activeRun,
-  waitingRun,
-  formatUSDC,
-  formatTime,
-  getRunStatusEmoji,
-} from '@/lib/mockData';
-import { ArrowRight, TrendingUp, Users, Clock, Coins, LogOut, AlertCircle } from 'lucide-react';
+import { 
+  Zap, Activity, Box, Cpu, Terminal, Shield, Layers, Target, ChevronRight, Signal, TrendingUp, Radar
+} from 'lucide-react';
+import { Panel } from '@/components/ui/instinct/Panel';
+import { Button } from '@/components/ui/instinct/Button';
+import { Badge } from '@/components/ui/instinct/Badge';
+import { Typewriter } from '@/components/ui/instinct/Typewriter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers, useRuns } from '@/hooks/useApi';
-// import { DepositDialog } from '@/components/DepositDialog'; // Temporarily disabled - use Lobby page
+import { formatUSDC } from '@/lib/mockData';
 import { useCountdown } from '@/hooks/useCountdown';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-export default function Dashboard() {
+const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   // Fetch user stats from backend
   const { data: userStatsResponse, isLoading: statsLoading } = useUsers.useGetUserStats(user?.id || '');
-  const { data: userDetailsResponse, isLoading: detailsLoading } = useUsers.useGetUserDetails(user?.id || '');
+  const { data: userDetailsResponse } = useUsers.useGetUserDetails(user?.id || '');
   
   // Fetch active runs from backend
   const { data: activeRunsResponse, isLoading: runsLoading } = useRuns.useGetActiveRuns();
+  const { data: runHistoryResponse } = useRuns.useGetRunHistory(1, 20);
 
   const userStats = userStatsResponse?.data;
-  const userDetails = userDetailsResponse?.data;
   const backendRuns = activeRunsResponse?.data || [];
+  const runHistory = runHistoryResponse?.data || [];
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
-  // Determine which run to show - prioritize backend data, fallback to mock
+  // Determine which run to show - prioritize backend data
   const backendActiveRun = backendRuns.find((r: any) => r.status === 'ACTIVE');
   const backendWaitingRun = backendRuns.find((r: any) => r.status === 'WAITING');
   
-  // Use backend run if available, otherwise fallback to mock data
-  const hasBackendRuns = !runsLoading && backendRuns.length > 0;
-  let displayRun;
+  const displayRun = backendActiveRun || backendWaitingRun;
+  const isActive = displayRun?.status === 'ACTIVE';
+  const isWaiting = displayRun?.status === 'WAITING';
+
+  // Calculate stats
+  const totalPool = displayRun?.participants?.reduce((sum: number, p: any) => sum + (p.depositAmount || 0), 0) || displayRun?.totalPool || 0;
+  const participantCount = displayRun?.participants?.length || displayRun?.participantCount || 0;
+  const currentRound = displayRun?.currentRound || 0;
+  const totalRounds = displayRun?.totalRounds || 12;
+  const tradingPair = displayRun?.tradingPair || 'SOL/USDC';
+  const coin = tradingPair.split('/')[0] || 'SOL';
   
-  if (backendActiveRun) {
-    displayRun = {
-      ...backendActiveRun,
-      status: backendActiveRun.status.toLowerCase(),
-      participants: backendActiveRun.participants || [],
-      participantCount: backendActiveRun.participants?.length || 0,
-      minDeposit: backendActiveRun.minDeposit || 10000,
-      maxDeposit: backendActiveRun.maxDeposit || 100000,
-    };
-  } else if (backendWaitingRun) {
-    displayRun = {
-      ...backendWaitingRun,
-      status: backendWaitingRun.status.toLowerCase(),
-      participants: backendWaitingRun.participants || [],
-      participantCount: backendWaitingRun.participants?.length || 0,
-      minDeposit: backendWaitingRun.minDeposit || 10000,
-      maxDeposit: backendWaitingRun.maxDeposit || 100000,
-    };
-  } else {
-    // Fallback to mock data
-    displayRun = activeRun.status === 'active' ? activeRun : waitingRun;
-  }
-  
-  const isActive = displayRun.status === 'active';
-  const isWaiting = displayRun.status === 'waiting';
+  // Calculate consensus (mock for now - would need vote data)
+  const consensus = 83; // This would come from voting data
 
-  const totalPoolFromParticipants =
-    displayRun.participants?.reduce((sum: number, participant: any) => {
-      return sum + (participant.depositAmount || 0);
-    }, 0) ?? 0;
+  // Countdown
+  const countdown = displayRun?.countdown || 0;
+  const smoothCountdown = useCountdown(countdown, countdown);
 
-  const displayTotalPoolCents =
-    totalPoolFromParticipants > 0 ? totalPoolFromParticipants : displayRun.totalPool;
+  // Net Asset Value (mock - would need user's total portfolio value)
+  const nav = userStats?.totalXp || 2450;
+  const navChange = 12; // Mock percentage
 
-  // Use smooth client-side countdown
-  const smoothCountdown = useCountdown(displayRun.countdown, displayRun.countdown);
+  // Global Rank (mock - would need leaderboard data)
+  const globalRank = 842;
 
-  const userParticipation = displayRun.participants?.find(
-    (p: any) => p.user?.id === user?.id || p.userId === user?.id
-  );
-  const isParticipating = !!userParticipation;
-
-  const profitLoss = displayRun.totalPool - displayRun.startingPool;
-  const profitLossPercent = displayRun.startingPool > 0
-    ? ((profitLoss / displayRun.startingPool) * 100).toFixed(1)
-    : '0.0';
-  const isProfit = profitLoss >= 0;
-
-  // Calculate current round from voting rounds if available, otherwise use currentRound field
-  const calculateCurrentRound = () => {
-    if (displayRun.votingRounds && displayRun.votingRounds.length > 0) {
-      // Find the highest round number that's OPEN or EXECUTING
-      const openRound = displayRun.votingRounds.find((r: any) => r.status === 'OPEN');
-      if (openRound) {
-        return openRound.round;
-      }
-      // If no open round, find the highest completed round
-      const maxRound = Math.max(...displayRun.votingRounds.map((r: any) => r.round || 0));
-      return maxRound;
+  const onEnterRun = () => {
+    if (displayRun) {
+      navigate(isActive ? `/game/${displayRun.id}` : `/lobby/${displayRun.id}`);
     }
-    // Fallback: use currentRound field, default to 1 if 0 or undefined
-    return displayRun.currentRound && displayRun.currentRound > 0 ? displayRun.currentRound : (isActive ? 1 : 0);
   };
 
-  const currentRound = calculateCurrentRound();
-  const progress = isActive && displayRun.totalRounds > 0
-    ? (currentRound / displayRun.totalRounds) * 100
-    : 0;
+  // Format run history for display
+  const formattedHistory = runHistory.slice(0, 5).map((run: any) => {
+    const startingPool = run.startingPool || 0;
+    const totalPool = run.totalPool || 0;
+    const change = startingPool > 0 ? ((totalPool - startingPool) / startingPool * 100) : 0;
+    return {
+      ...run,
+      change,
+      isProfit: change >= 0,
+    };
+  });
 
   return (
-    <div className="min-h-screen bg-gradient-subtle p-4 md:p-8">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-8">
-        <div className="flex items-center justify-between mb-4">
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="grid grid-cols-12 gap-6 p-4 lg:p-6 max-w-[1800px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* Header */}
+        <div className="col-span-12 flex justify-between items-end border-b border-zinc-800/50 pb-6 relative">
+          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-indigo-500/0 via-indigo-500/50 to-indigo-500/0" />
           <div>
-            <h1 className="text-4xl font-bold mb-2 text-foreground">🎮 Instinct.fi</h1>
-            <p className="text-muted-foreground">
-              Gamified community trading on Solana
-              {user && (
-                <span className="ml-2 text-primary font-semibold">
-                  • {user.username}
+            <h1 className="text-5xl font-light tracking-tighter text-white mb-2 font-display animate-glitch">
+              INSTINCTFI <span className="text-indigo-500 font-bold">XYZ_</span>
+            </h1>
+            <div className="flex gap-4 text-xs font-mono text-zinc-500">
+              <span className="flex items-center gap-2 text-emerald-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-              )}
-            </p>
+                SYSTEM ONLINE
+              </span>
+              <span>EPOCH: <Typewriter text="42.0.1" speed={100} delay={500} /></span>
+              <span className="flex items-center gap-1"><Signal size={10}/> 14 GWEI</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Deposit button temporarily disabled - use Lobby page for deposits */}
-            {/* <DepositDialog 
-              runId={displayRun.id.toString()}
-              minDeposit={displayRun.minDeposit / 1000} 
-              maxDeposit={displayRun.maxDeposit / 1000}
-            /> */}
-            <Button
-              variant="outline"
-              onClick={() => navigate('/profile')}
-              className="shadow-soft-sm"
-            >
-              Profile
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleLogout}
-              className="shadow-soft-sm"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </Button>
+          <div className="flex gap-8 text-right">
+            <div className="group">
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 group-hover:text-indigo-400 transition-colors">Net Asset Value</div>
+              <div className="text-3xl font-mono text-white">
+                ${nav.toLocaleString()} <span className="text-emerald-500 text-sm">(+{navChange}%)</span>
+              </div>
+            </div>
+            <div className="group">
+              <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 group-hover:text-indigo-400 transition-colors">Global Rank</div>
+              <div className="text-3xl font-mono text-indigo-400">#{globalRank}</div>
+            </div>
           </div>
         </div>
 
-        {/* User Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              {statsLoading ? (
-                <Skeleton className="h-8 w-20 mb-1" />
-              ) : (
-                <div className="text-2xl font-bold text-foreground">
-                  {userStats?.totalXp || user?.xp || 0}
-                </div>
-              )}
-              <div className="text-sm text-muted-foreground">Total XP</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              {statsLoading ? (
-                <Skeleton className="h-8 w-20 mb-1" />
-              ) : (
-                <div className="text-2xl font-bold text-foreground">
-                  {userStats?.totalRuns || user?.totalRuns || 0}
-                </div>
-              )}
-              <div className="text-sm text-muted-foreground">Runs Joined</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              {statsLoading ? (
-                <Skeleton className="h-8 w-20 mb-1" />
-              ) : (
-                <div className="text-2xl font-bold text-foreground">
-                  {userStats?.winRate?.toFixed(1) || user?.winRate || 0}%
-                </div>
-              )}
-              <div className="text-sm text-muted-foreground">Win Rate</div>
-            </CardContent>
-          </Card>
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              {detailsLoading ? (
-                <Skeleton className="h-8 w-20 mb-1" />
-              ) : (
-                <div className="text-2xl font-bold text-foreground">
-                  {userDetails?.badges?.length || user?.badges?.length || 0}
-                </div>
-              )}
-              <div className="text-sm text-muted-foreground">Badges</div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Active/Waiting Run Card */}
-          {hasBackendRuns ? (
-          <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl flex items-center gap-2 text-foreground">
-                  {getRunStatusEmoji(displayRun.status)} Run #{displayRun.id}
-                </CardTitle>
-                <Badge
-                  variant={isActive ? 'default' : 'secondary'}
-                  className={
-                    isActive
-                      ? 'bg-red-500/10 text-red-600 border-red-500/30'
-                      : 'bg-primary/10 text-primary border-primary/30'
-                  }
-                >
-                  {displayRun.status.toUpperCase()}
-                </Badge>
+        {/* Main Feed */}
+        <div className="col-span-12 lg:col-span-8 space-y-6">
+          {/* Featured Run */}
+          {displayRun ? (
+            <Panel active className="p-8 cursor-pointer relative overflow-hidden group h-full flex flex-col justify-between min-h-[400px]" onClick={onEnterRun}>
+              <div className="absolute top-0 right-0 p-2 px-4 text-xs font-mono text-indigo-300 border-b border-l border-indigo-500/30 bg-indigo-500/10 backdrop-blur-md z-20">
+                <span className="animate-pulse">●</span> STATUS: {displayRun.status.toUpperCase()} [{currentRound}/{totalRounds}]
               </div>
-              <CardDescription>
-                {isActive
-                  ? `Trading ${displayRun.tradingPair}`
-                  : 'Waiting for game to start'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Pool Info */}
-              <div className="bg-muted rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Coins className="w-4 h-4" />
-                    Total Pool
-                  </span>
-                  <span className="text-2xl font-bold text-foreground">
-                    {formatUSDC(displayTotalPoolCents)} USDC
-                  </span>
-                </div>
+              
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none group-hover:bg-indigo-600/20 transition-colors duration-500" />
 
-                {isActive && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Profit/Loss</span>
-                    <span
-                      className={`font-bold ${
-                        isProfit ? 'text-success' : 'text-destructive'
-                      }`}
-                    >
-                      {isProfit ? '+' : ''}
-                      {formatUSDC(profitLoss)} USDC ({isProfit ? '+' : ''}
-                      {profitLossPercent}%)
-                    </span>
+              <div className="relative z-10">
+                <div className="flex items-center gap-6 mb-8">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-indigo-500 blur-lg opacity-20 animate-pulse" />
+                    <div className="w-20 h-20 border border-indigo-500/50 bg-indigo-500/10 flex items-center justify-center text-indigo-400 relative z-10 hexagon-clip">
+                      <Zap size={40} strokeWidth={1.5} className="drop-shadow-[0_0_10px_rgba(99,102,241,0.8)]" />
+                    </div>
                   </div>
-                )}
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Players
-                  </span>
-                  <span className="font-medium text-foreground">
-                    {displayRun.participantCount} / {displayRun.maxParticipants}
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress */}
-              {isActive && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="font-medium text-foreground">
-                      Round {currentRound} / {displayRun.totalRounds}
-                    </span>
-                  </div>
-                  <Progress value={progress} className="h-2" />
-                </div>
-              )}
-
-              {/* Countdown */}
-              <div className="bg-muted rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    {isActive ? 'Next Vote Closes' : 'Lobby Ends In'}
-                  </span>
-                  <span className="text-xl font-mono font-bold text-primary">
-                    {formatTime(smoothCountdown)}
-                  </span>
-                </div>
-                {isWaiting && smoothCountdown > 0 && (
-                  <div className="mt-2 text-xs text-muted-foreground text-center">
-                    Run starts automatically in {Math.floor(smoothCountdown / 60)} min {smoothCountdown % 60} sec
-                  </div>
-                )}
-                {isWaiting && (displayRun.participants?.length || 0) === 0 && (
-                  <div className="mt-2 text-xs text-warning text-center">
-                    ⚠️ Run will be canceled if no one joins
-                  </div>
-                )}
-              </div>
-
-              {/* Your Participation */}
-              {isParticipating && (
-                <div className="bg-success/10 border border-success/30 rounded-lg p-4">
-                  <div className="text-sm text-muted-foreground mb-1">Your Deposit</div>
-                  <div className="text-xl font-bold text-success">
-                    {formatUSDC(userParticipation.depositAmount)} USDC
-                  </div>
-                  {isActive && (
-                    <div className="mt-2 text-sm">
-                      <span className="text-muted-foreground">Votes: </span>
-                      <span className="text-success font-medium">
-                        {userParticipation.votesCorrect} / {userParticipation.totalVotes}{' '}
-                        correct
+                  <div>
+                    <h2 className="text-4xl text-white font-light mb-2 tracking-tight">{coin}-PERP <span className="text-zinc-600 text-2xl">/</span> USDC</h2>
+                    <div className="flex items-center gap-3 text-sm font-mono">
+                      <Badge label="VOLATILITY: HIGH" color="cyan" pulse />
+                      <span className="text-zinc-700">|</span>
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <TrendingUp size={14}/> YIELD: {displayRun.totalPool && displayRun.startingPool ? 
+                          `+${(((displayRun.totalPool - displayRun.startingPool) / displayRun.startingPool) * 100).toFixed(0)}%` : 
+                          '+24%'}
                       </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-10">
+                  {[
+                    { label: "Pool Liquidity", val: `$${formatUSDC(totalPool)}`, icon: Box, color: "text-white" },
+                    { label: "Active Nodes", val: participantCount.toString(), icon: Cpu, color: "text-indigo-300" },
+                    { label: "Consensus", val: `${consensus}%`, icon: Radar, color: "text-emerald-300" }
+                  ].map((stat, i) => (
+                    <div key={i} className="bg-black/40 p-4 border border-zinc-800/50 backdrop-blur-sm group/stat hover:border-indigo-500/30 transition-colors">
+                      <div className="flex items-center gap-2 text-zinc-500 text-[10px] uppercase mb-2 group-hover/stat:text-indigo-400">
+                        <stat.icon size={12} /> {stat.label}
+                      </div>
+                      <div className={`text-xl font-mono ${stat.color}`}>{stat.val}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-end relative z-10">
+                <div className="flex -space-x-3 pl-2">
+                  {displayRun.participants?.slice(0, 4).map((p: any, i: number) => (
+                    <div key={i} className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-500 ring-4 ring-[#080808] relative z-0 hover:z-10 transition-all hover:scale-110 hover:border-indigo-500 cursor-help">
+                      {p.user?.username?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                  ))}
+                  {participantCount > 4 && (
+                    <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-400 ring-4 ring-[#080808] z-0">
+                      +{participantCount - 4}
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Action Button */}
-              <Button
-                className="w-full font-bold text-lg py-6 shadow-soft-md hover:shadow-soft-lg transition-all"
-                style={{ background: 'var(--gradient-primary)' }}
-                onClick={() =>
-                  navigate(isActive ? `/game/${displayRun.id}` : isWaiting ? `/lobby/${displayRun.id}` : `/game/${displayRun.id}`)
-                }
-              >
-                {isParticipating
-                  ? isActive
-                    ? 'Join Game →'
-                    : 'View Lobby →'
-                  : isWaiting
-                  ? 'Join Run →'
-                  : 'Spectate →'}
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </CardContent>
-          </Card>
-          ) : (
-          <Card className="bg-muted/50 border-dashed border-2 shadow-soft-lg">
-            <CardContent className="p-12 text-center">
-              <div className="text-6xl mb-4">🎮</div>
-              <h3 className="text-xl font-bold text-foreground mb-2">No Currently Active Runs</h3>
-              <p className="text-muted-foreground mb-6">
-                There are no trading runs available right now.<br />
-                New runs are created regularly - check back soon!
-              </p>
-              <div className="flex flex-col gap-3 max-w-sm mx-auto">
-                <div className="text-sm text-muted-foreground">
-                  When a run is available, you can:
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Coins className="w-4 h-4 text-primary" />
-                  <span>Deposit 10-100 USDC to join</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Users className="w-4 h-4 text-primary" />
-                  <span>Vote with the community</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <TrendingUp className="w-4 h-4 text-primary" />
-                  <span>Share profits & earn XP</span>
-                </div>
+                <Button variant="primary" className="pl-10 pr-10 h-14 text-sm shadow-lg shadow-indigo-900/20">
+                  Initialize Link <ChevronRight size={16} className="ml-2 animate-pulse" />
+                </Button>
               </div>
-            </CardContent>
-          </Card>
+            </Panel>
+          ) : (
+            <Panel className="p-8 min-h-[400px] flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎮</div>
+                <h3 className="text-xl font-bold text-zinc-300 mb-2">No Active Runs</h3>
+                <p className="text-zinc-500 text-sm">Check back soon for new trading opportunities</p>
+              </div>
+            </Panel>
           )}
 
-          {/* How It Works */}
-          <Card className="card-elevated">
-            <CardHeader>
-              <CardTitle className="text-xl text-foreground">🎯 How It Works</CardTitle>
-              <CardDescription>ELI5 Trading Made Simple</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          {/* Secondary Feeds */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Panel className="p-6 min-h-[200px] flex flex-col justify-between hover:bg-zinc-900/50 transition-colors group cursor-pointer">
+              <div className="flex justify-between items-start">
+                <div>
+                  <Badge label="Queued" color="zinc" />
+                  <h3 className="text-xl mt-4 text-zinc-300 group-hover:text-white transition-colors font-display">BTC-PERP</h3>
+                </div>
+                <Terminal size={20} className="text-zinc-600 group-hover:text-indigo-400 transition-colors" />
+              </div>
               <div className="space-y-3">
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                    1
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Join a Run</div>
-                    <div className="text-sm text-muted-foreground">
-                      Deposit 10-100 USDC during waiting phase
-                    </div>
+                <div className="w-full bg-zinc-900 h-1.5 overflow-hidden">
+                  <div className="bg-zinc-600 h-full w-3/4 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite]" />
                   </div>
                 </div>
-
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary/10 text-secondary flex items-center justify-center font-bold">
-                    2
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Vote Together</div>
-                    <div className="text-sm text-muted-foreground">
-                      Every 10 minutes: Buy, Sell, or Skip
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-success/10 text-success flex items-center justify-center font-bold">
-                    3
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Share Outcomes</div>
-                    <div className="text-sm text-muted-foreground">
-                      Win or lose together, earn XP and badges
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-warning/10 text-warning flex items-center justify-center font-bold">
-                    4
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Collect Rewards</div>
-                    <div className="text-sm text-muted-foreground">
-                      Withdraw your share after 2 hours
-                    </div>
-                  </div>
+                <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
+                  <span className="animate-pulse">FILLING...</span>
+                  <span>75%</span>
                 </div>
               </div>
-
-              <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 mt-4">
-                <div className="flex items-start gap-2">
-                  <TrendingUp className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-warning text-sm">
-                      Chaos Mode Active!
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Random leverage (1x-20x) and position size (10%-100%) each
-                      round. Embrace the chaos! 🎲
-                    </div>
-                  </div>
+            </Panel>
+            
+            <Panel className="p-6 min-h-[200px] flex flex-col justify-between border-dashed border-zinc-800 opacity-60 hover:opacity-80 transition-opacity cursor-not-allowed">
+              <div className="flex justify-between items-start">
+                <div>
+                  <Badge label="Locked" color="red" />
+                  <h3 className="text-xl mt-4 text-zinc-500 font-display">ETH-CORE</h3>
                 </div>
+                <Shield size={20} className="text-zinc-700" />
               </div>
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => navigate('/history')}
-              >
-                View Past Runs
-              </Button>
-            </CardContent>
-          </Card>
+              <div className="text-xs text-red-900/80 font-mono border border-red-900/30 bg-red-900/10 p-2 text-center uppercase tracking-wider">
+                <Shield size={10} className="inline mr-2"/> Level 15 Required
+              </div>
+            </Panel>
+          </div>
         </div>
 
-        {/* Recent Badges */}
-        {!detailsLoading && userDetails?.badges && userDetails.badges.length > 0 && (
-          <Card className="mt-6 card-elevated">
-            <CardHeader>
-              <CardTitle className="text-xl text-foreground">🏆 Your Recent Badges</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {detailsLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-32 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {userDetails.badges.slice(0, 6).map((badgeItem: any) => {
-                    // Handle both UserBadge structure (from API) and simplified Badge structure (fallback)
-                    const badge = badgeItem.badge || badgeItem;
-                    const badgeId = badgeItem.badgeId || badgeItem.id;
-                    const earnedAt = badgeItem.earnedAt;
-                    
-                    return (
-                      <div
-                        key={badgeId}
-                        className="bg-gradient-to-br from-warning/10 to-warning/5 border border-warning/30 rounded-lg p-4 shadow-soft-sm"
-                      >
-                        <div className="text-4xl mb-2">{badge.emoji}</div>
-                        <div className="font-bold text-warning">{badge.name}</div>
-                        <div className="text-sm text-muted-foreground mt-1">
-                          {badge.description}
-                        </div>
-                        <div className="text-xs text-muted-foreground/70 mt-2">
-                          {new Date(earnedAt).toLocaleDateString()}
-                        </div>
+        {/* Sidebar */}
+        <div className="col-span-12 lg:col-span-4 space-y-6">
+          <Panel className="p-6 h-auto flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                <Layers size={14} className="text-indigo-500" /> Protocol History
+              </h3>
+              <button 
+                onClick={() => navigate('/history')}
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono uppercase tracking-wider flex items-center gap-1 hover:gap-2 transition-all"
+              >
+                View All <ChevronRight size={12} />
+              </button>
+            </div>
+            <div className="space-y-0 flex-1 overflow-y-auto custom-scrollbar pr-2 max-h-[300px]">
+              {formattedHistory.length > 0 ? (
+                formattedHistory.map((run: any, i: number) => (
+                  <div 
+                    key={i} 
+                    onClick={() => navigate(`/results/${run.id}`)}
+                    className="flex justify-between items-center text-sm border-b border-zinc-800/30 py-3 last:border-0 hover:bg-indigo-500/5 px-2 transition-all cursor-pointer group hover:border-indigo-500/20"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px_currentColor] ${run.isProfit ? 'bg-emerald-500 text-emerald-500' : 'bg-red-500 text-red-500'}`} />
+                      <span className="font-mono text-zinc-400 group-hover:text-white transition-colors">#{run.id} {run.tradingPair || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`font-mono ${run.isProfit ? 'text-emerald-500' : 'text-red-500'} font-bold`}>
+                        {run.isProfit ? '+' : ''}{run.change.toFixed(1)}%
                       </div>
-                    );
-                  })}
-                </div>
+                      <ChevronRight size={14} className="text-zinc-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center text-zinc-500 text-sm py-8">No history yet</div>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </Panel>
+          
+          <Panel className="p-6 bg-gradient-to-br from-zinc-900/80 to-black border-indigo-500/20 relative overflow-hidden">
+            <div className="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl" />
+            
+            <h3 className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-6 flex items-center gap-2 relative z-10">
+              <Target size={14} /> Daily Quests
+            </h3>
+            <ul className="space-y-6 relative z-10">
+              <li className="text-sm group">
+                <div className="flex justify-between mb-2 text-zinc-300 font-display tracking-wide">
+                  <span className="group-hover:text-indigo-300 transition-colors">Consensus Master</span>
+                  <span className="text-indigo-400 font-mono text-xs">3/5</span>
+                </div>
+                <div className="w-full bg-zinc-900/80 h-2 border border-zinc-800 rounded-sm overflow-hidden">
+                  <div className="bg-indigo-500 h-full w-3/5 shadow-[0_0_15px_rgba(99,102,241,0.6)] relative">
+                    <div className="absolute top-0 right-0 w-1 h-full bg-white/50 animate-pulse" />
+                  </div>
+                </div>
+              </li>
+              <li className="text-sm group">
+                <div className="flex justify-between mb-2 text-zinc-300 font-display tracking-wide">
+                  <span className="group-hover:text-emerald-300 transition-colors">Diamond Hand</span>
+                  <span className="text-emerald-500 font-mono text-xs flex items-center gap-1"><Target size={10}/> DONE</span>
+                </div>
+                <div className="w-full bg-zinc-900/80 h-2 border border-zinc-800 rounded-sm overflow-hidden">
+                  <div className="bg-emerald-500 h-full w-full shadow-[0_0_15px_rgba(16,185,129,0.6)] relative">
+                    <div className="absolute inset-0 bg-white/10 animate-[shimmer_2s_infinite]" />
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </Panel>
+        </div>
       </div>
     </div>
   );
-}
+};
 
+export default Dashboard;

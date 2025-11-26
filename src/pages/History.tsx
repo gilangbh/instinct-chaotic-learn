@@ -1,279 +1,131 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Activity, Layers, Trophy, XCircle, Users, ChevronRight } from 'lucide-react';
+import { Panel } from '@/components/ui/instinct/Panel';
+import { Badge } from '@/components/ui/instinct/Badge';
 import { formatUSDC } from '@/lib/mockData';
-import { ArrowLeft, Calendar, TrendingUp, TrendingDown, Users, Loader2 } from 'lucide-react';
 import { useRuns } from '@/hooks/useApi';
 
-export default function History() {
+const History = () => {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const limit = 20;
   
-  const { data: historyResponse, isLoading, error } = useRuns.useGetRunHistory(page, limit);
-  // Backend returns: { success: true, data: runs[], pagination: { total, ... } }
+  const { data: historyResponse, isLoading } = useRuns.useGetRunHistory(page, limit);
   const runHistory = historyResponse?.data || [];
-  const totalRuns = historyResponse?.pagination?.total || 0;
-  const totalPages = historyResponse?.pagination?.totalPages || 0;
 
-  // Debug logging
-  if (historyResponse) {
-    console.log('[History] API Response:', {
-      hasData: !!historyResponse.data,
-      runsCount: Array.isArray(historyResponse.data) ? historyResponse.data.length : 0,
-      total: historyResponse.pagination?.total,
-      pagination: historyResponse.pagination,
-    });
-  }
+  const historyLogs = runHistory.map((run: any) => ({
+    id: `RUN #${run.id}`,
+    pair: run.tradingPair || 'Unknown',
+    result: (run.totalPool || 0) >= (run.startingPool || 0) ? 'WIN' : 'LOSS',
+    change: `${(run.totalPool || 0) >= (run.startingPool || 0) ? '+' : ''}${run.startingPool > 0 ? (((run.totalPool || 0) - (run.startingPool || 0)) / run.startingPool * 100).toFixed(1) : '0.0'}%`,
+    amount: `${(run.totalPool || 0) >= (run.startingPool || 0) ? '+' : ''}${formatUSDC((run.totalPool || 0) - (run.startingPool || 0))} USDC`,
+    start: formatUSDC(run.startingPool || 0),
+    end: formatUSDC(run.totalPool || 0),
+    players: run.participantCount || 0,
+    duration: `${run.duration || 120}m`
+  }));
+
+  const stats = [
+    { label: "Total Runs", val: runHistory.length.toString(), icon: Layers, color: "text-indigo-400" },
+    { label: "Victories", val: runHistory.filter((r: any) => (r.totalPool || 0) >= (r.startingPool || 0)).length.toString(), icon: Trophy, color: "text-emerald-400" },
+    { label: "Defeats", val: runHistory.filter((r: any) => (r.totalPool || 0) < (r.startingPool || 0)).length.toString(), icon: XCircle, color: "text-red-400" },
+    { label: "Participants", val: runHistory.reduce((acc: number, r: any) => acc + (r.participantCount || 0), 0).toString(), icon: Users, color: "text-zinc-200" },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Header */}
-      <div className="bg-card border-b border-border px-4 py-3 shadow-soft-sm">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div className="text-center">
-            <div className="font-bold text-foreground">Run History</div>
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="p-4 lg:p-6 max-w-[1800px] mx-auto animate-in fade-in duration-500">
+       {/* Header */}
+       <div className="flex items-center gap-4 mb-8 border-b border-zinc-800/50 pb-6 relative">
+          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-indigo-500/0 via-indigo-500/50 to-indigo-500/0" />
+          <div className="w-16 h-16 bg-indigo-500/10 flex items-center justify-center border border-indigo-500/30 hexagon-clip animate-pulse">
+             <Activity size={32} className="text-indigo-500" />
           </div>
-          <div className="w-20"></div>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto p-4 space-y-4">
-        {/* Header */}
-        <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-          <CardContent className="p-8 text-center">
-            <div className="text-6xl mb-4">📊</div>
-            <h1 className="text-4xl font-bold mb-2 text-foreground">Past Runs</h1>
-            <p className="text-muted-foreground">
-              Browse through previous trading games and their results
+          <div>
+            <h1 className="text-3xl font-light text-white font-display">ARCHIVE <span className="text-zinc-600">//</span> LOGS</h1>
+            <p className="text-zinc-500 font-mono text-xs tracking-widest flex items-center gap-2">
+               <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+               PAST_CYCLE_DATA
             </p>
-          </CardContent>
-        </Card>
-
-        {/* Loading State */}
-        {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <span className="ml-3 text-muted-foreground">Loading run history...</span>
           </div>
-        )}
+       </div>
 
-        {/* Error State */}
-        {error && (
-          <Card className="card-elevated border-destructive/50">
-            <CardContent className="p-6 text-center">
-              <div className="text-2xl mb-2">❌</div>
-              <div className="text-xl font-bold text-foreground mb-2">Error Loading History</div>
-              <div className="text-muted-foreground">
-                Failed to load run history. Please try again later.
-              </div>
-            </CardContent>
-          </Card>
-        )}
+       {/* Summary Cards */}
+       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+         {stats.map((stat, i) => (
+            <Panel key={i} className="p-4 flex flex-col items-center justify-center hover:border-indigo-500/30">
+               <div className={`mb-2 opacity-80 ${stat.color}`}><stat.icon size={20} /></div>
+               <div className={`text-2xl font-display font-bold ${stat.color}`}>{stat.val}</div>
+               <div className="text-[10px] uppercase tracking-widest text-zinc-600">{stat.label}</div>
+            </Panel>
+         ))}
+       </div>
 
-        {/* Stats Overview */}
-        {!isLoading && !error && (
-          <div className="grid md:grid-cols-4 gap-4">
-            <Card className="card-elevated">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-bold text-primary">{totalRuns}</div>
-                <div className="text-sm text-muted-foreground mt-1">Total Runs</div>
-              </CardContent>
-            </Card>
-            <Card className="card-elevated">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-bold text-success">
-                  {runHistory.filter((r) => (r.totalPool || 0) > (r.startingPool || 0)).length}
-                </div>
-                <div className="text-sm text-muted-foreground mt-1">Winning Runs</div>
-              </CardContent>
-            </Card>
-            <Card className="card-elevated">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-bold text-destructive">
-                  {runHistory.filter((r) => (r.totalPool || 0) < (r.startingPool || 0)).length}
-                </div>
-                <div className="text-sm text-muted-foreground mt-1">Losing Runs</div>
-              </CardContent>
-            </Card>
-            <Card className="card-elevated">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-bold text-secondary">
-                  {runHistory.reduce((sum, r) => sum + (r.participantCount || r.participants?.length || 0), 0)}
-                </div>
-                <div className="text-sm text-muted-foreground mt-1">Total Participants</div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Runs List */}
-        {!isLoading && !error && (
-          <div className="space-y-4">
-            {runHistory.map((run: any) => {
-              const startingPool = run.startingPool || 0;
-              const totalPool = run.totalPool || 0;
-              const profitLoss = totalPool - startingPool;
-              const profitLossPercent = startingPool > 0 
-                ? ((profitLoss / startingPool) * 100).toFixed(1)
-                : '0.0';
-              const isProfit = profitLoss >= 0;
-              const endedAt = run.endedAt ? new Date(run.endedAt) : null;
-              const participantCount = run.participantCount || run.participants?.length || 0;
-
-            return (
-              <Card
-                key={run.id}
-                className="card-elevated hover:shadow-soft-lg transition-all cursor-pointer"
-                onClick={() => navigate(`/results/${run.id}`)}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white" style={{ background: 'var(--gradient-primary)' }}>
-                        #{run.id}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 text-foreground">
-                          {run.tradingPair}
-                          <Badge
-                            className={
-                              isProfit
-                                ? 'bg-success/10 text-success border-success/50'
-                                : 'bg-destructive/10 text-destructive border-destructive/50'
-                            }
-                          >
-                            {isProfit ? '🟢 WIN' : '🔴 LOSS'}
-                          </Badge>
+       {/* History List */}
+       <div className="space-y-4">
+          <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-2 pl-1">Operation Logs</h3>
+          {isLoading ? (
+            <div className="text-center py-12 text-zinc-500">Loading history...</div>
+          ) : historyLogs.length === 0 ? (
+            <div className="text-center py-12 text-zinc-500">No history available</div>
+          ) : (
+            historyLogs.map((log, i) => (
+               <Panel key={i} className="p-6 flex flex-col md:flex-row justify-between items-center gap-6 group hover:border-indigo-500/30 transition-all hover:bg-indigo-500/5">
+                  
+                  {/* Left: Status */}
+                  <div className="flex items-center gap-4 w-full md:w-auto">
+                     <div className={`w-1 h-16 transition-all group-hover:h-20 group-hover:w-1.5 rounded-full ${log.result === 'WIN' ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]'}`} />
+                     <div>
+                        <div className="flex items-center gap-3 mb-1">
+                           <Badge label={log.id} color="zinc" />
+                           <Badge label={log.result} color={log.result === 'WIN' ? 'emerald' : 'red'} pulse={log.result === 'WIN'} />
                         </div>
-                        <div className="text-sm text-muted-foreground font-normal mt-1 flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          {endedAt ? (
-                            <>
-                              {endedAt.toLocaleDateString()} at{' '}
-                              {endedAt.toLocaleTimeString()}
-                            </>
-                          ) : (
-                            'Date unavailable'
-                          )}
-                        </div>
-                      </div>
-                    </CardTitle>
-                    <div className="text-right">
-                      <div
-                        className={`text-3xl font-bold ${
-                          isProfit ? 'text-success' : 'text-destructive'
-                        }`}
-                      >
-                        {isProfit ? '+' : ''}
-                        {profitLossPercent}%
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {isProfit ? '+' : ''}
-                        {formatUSDC(profitLoss)} USDC
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid md:grid-cols-4 gap-4">
-                    <div className="bg-muted rounded p-3">
-                      <div className="text-sm text-muted-foreground mb-1">Starting Pool</div>
-                      <div className="font-bold text-foreground">{formatUSDC(startingPool)} USDC</div>
-                    </div>
-                    <div className="bg-muted rounded p-3">
-                      <div className="text-sm text-muted-foreground mb-1">Final Pool</div>
-                      <div className="font-bold text-foreground">{formatUSDC(totalPool)} USDC</div>
-                    </div>
-                    <div className="bg-muted rounded p-3">
-                      <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        Players
-                      </div>
-                      <div className="font-bold text-foreground">{participantCount}</div>
-                    </div>
-                    <div className="bg-muted rounded p-3">
-                      <div className="text-sm text-muted-foreground mb-1">Duration</div>
-                      <div className="font-bold text-foreground">
-                        {run.duration || (run.startedAt && run.endedAt 
-                          ? Math.round((new Date(run.endedAt).getTime() - new Date(run.startedAt).getTime()) / 60000)
-                          : 'N/A')} minutes
-                      </div>
-                    </div>
+                        <div className="text-xl text-white font-display tracking-wide">{log.pair}</div>
+                        <div className="text-[10px] text-zinc-500 font-mono">timestamp: {new Date().toLocaleDateString()}</div>
+                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      {isProfit ? (
-                        <>
-                          <TrendingUp className="w-4 h-4 text-success" />
-                          <span>Community earned together</span>
-                        </>
-                      ) : (
-                        <>
-                          <TrendingDown className="w-4 h-4 text-destructive" />
-                          <span>Tough market, better luck next time</span>
-                        </>
-                      )}
-                    </div>
-                    <Button variant="ghost" size="sm" className="text-primary">
-                      View Details →
-                    </Button>
+                  {/* Middle: Details Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-2 w-full md:w-auto bg-zinc-900/30 p-3 rounded border border-zinc-800/50">
+                     <div>
+                        <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Start Pool</div>
+                        <div className="font-mono text-zinc-300 text-xs">{log.start}</div>
+                     </div>
+                     <div>
+                        <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Final Pool</div>
+                        <div className="font-mono text-white text-xs">{log.end}</div>
+                     </div>
+                     <div>
+                        <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Players</div>
+                        <div className="font-mono text-zinc-300 text-xs">{log.players}</div>
+                     </div>
+                     <div>
+                        <div className="text-[9px] uppercase text-zinc-600 mb-0.5">Duration</div>
+                        <div className="font-mono text-zinc-300 text-xs">{log.duration}</div>
+                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-        )}
 
-        {/* Empty State */}
-        {!isLoading && !error && runHistory.length === 0 && (
-          <Card className="card-elevated">
-            <CardContent className="p-12 text-center">
-              <div className="text-6xl mb-4">📊</div>
-              <div className="text-2xl font-bold mb-2 text-foreground">No runs yet!</div>
-              <div className="text-muted-foreground">
-                History will appear here after runs are completed
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Pagination */}
-        {!isLoading && !error && totalPages > 1 && (
-          <div className="flex items-center justify-center gap-4 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              Previous
-            </Button>
-            <div className="text-sm text-muted-foreground">
-              Page {page} of {totalPages}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >
-              Next
-            </Button>
-          </div>
-        )}
+                  {/* Right: Result */}
+                  <div className="text-right w-full md:w-auto">
+                     <div className={`text-2xl font-display font-bold ${log.result === 'WIN' ? 'text-emerald-400' : 'text-red-500'}`}>
+                        {log.change}
+                     </div>
+                     <div className="text-xs font-mono text-zinc-500">{log.amount}</div>
+                     <button 
+                        onClick={() => navigate(`/results/${runHistory[i]?.id}`)}
+                        className="mt-2 text-[10px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:underline flex items-center gap-1 hover:gap-2 transition-all"
+                     >
+                        VIEW_FULL_ANALYSIS <ChevronRight size={12} />
+                     </button>
+                  </div>
+               </Panel>
+            ))
+          )}
+       </div>
       </div>
     </div>
   );
-}
+};
 
+export default History;

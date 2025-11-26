@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@300;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,44 +10,44 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Base colors - Clean, bright whites and soft grays */
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* Base colors - Dark Theme V2 */
+    --background: 0 0% 1%; /* #030303 */
+    --foreground: 240 5% 84%; /* zinc-200 */
 
-    /* Card colors - Subtle elevation with soft shadows */
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    /* Card colors - Dark Theme */
+    --card: 0 0% 3%; /* #080808 */
+    --card-foreground: 0 0% 98%;
 
     /* Popover colors */
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover: 0 0% 3%;
+    --popover-foreground: 0 0% 98%;
 
-    /* Primary - Professional blue with moderate saturation */
-    --primary: 221 83% 53%;
-    --primary-foreground: 0 0% 100%;
+    /* Primary - Dark Theme Indigo */
+    --primary: 239 84% 67%; /* indigo-500 */
+    --primary-foreground: 0 0% 98%;
 
-    /* Secondary - Soft indigo for harmony */
-    --secondary: 242 47% 58%;
-    --secondary-foreground: 0 0% 100%;
+    /* Secondary - Dark Theme */
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
 
-    /* Muted - Subtle grays for depth */
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
+    /* Muted - Dark Theme */
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
 
-    /* Accent - Vibrant but not harsh blue */
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
+    /* Accent - Dark Theme */
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
 
-    /* Destructive - Softer red, not alarming */
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
+    /* Destructive - Dark Theme */
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
 
-    /* Borders and inputs - Clean, minimal */
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 221 83% 53%;
+    /* Borders and inputs - Dark Theme */
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
 
-    --radius: 0.75rem;
+    --radius: 0rem;
 
     /* Success color - Professional green */
     --success: 142 71% 45%;
@@ -78,7 +80,7 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-[#030303] text-zinc-200 font-sans antialiased selection:bg-indigo-500/30;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -156,6 +158,77 @@ All colors MUST be HSL.
 
   .bg-warning {
     background-color: hsl(var(--warning));
+  }
+
+  /* Custom Fonts */
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .font-display { font-family: 'Space Grotesk', sans-serif; }
+  
+  /* Custom Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #000; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+
+  /* ANIMATIONS */
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+  .animate-scanline {
+    animation: scanline 8s linear infinite;
+  }
+
+  @keyframes grid-move {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(40px); }
+  }
+  .animate-grid {
+    animation: grid-move 3s linear infinite;
+  }
+
+  @keyframes radar-pulse {
+    0% { box-shadow: 0 0 0 0px rgba(99, 102, 241, 0.4); opacity: 1; }
+    100% { box-shadow: 0 0 0 20px rgba(99, 102, 241, 0); opacity: 0; }
+  }
+  .animate-radar {
+    animation: radar-pulse 2s infinite;
+  }
+
+  @keyframes glitch-skew {
+    0% { transform: skew(0deg); }
+    20% { transform: skew(-2deg); }
+    40% { transform: skew(2deg); }
+    60% { transform: skew(-1deg); }
+    80% { transform: skew(1deg); }
+    100% { transform: skew(0deg); }
+  }
+  .animate-glitch {
+    animation: glitch-skew 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+  }
+
+  @keyframes marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+  }
+  .animate-marquee {
+    animation: marquee 20s linear infinite;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .animate-shimmer {
+    animation: shimmer 1s infinite;
+  }
+  
+  .hexagon-clip {
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+  
+  .text-shadow-glow {
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
   }
 }
 

@@ -82,8 +82,18 @@ class ApiClient {
       }
 
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('API request failed:', error);
+      
+      // Enhance network errors with more context
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        const networkError = new Error(
+          `NetworkError: Unable to connect to ${url}. Please check if the backend server is running.`
+        );
+        networkError.cause = error;
+        throw networkError;
+      }
+      
       throw error;
     }
   }

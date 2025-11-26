@@ -166,8 +166,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Wallet login error:', error);
       
+      // Provide more helpful error messages
+      let errorMessage = 'Unable to verify wallet signature with backend';
+      
+      if (error.message?.includes('NetworkError') || error.message?.includes('Failed to fetch') || error.message?.includes('fetch')) {
+        errorMessage = 'Unable to connect to the server. Please make sure the backend is running and accessible.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       // DO NOT fallback to mock data - wallet authentication MUST succeed
-      alert(`Wallet authentication failed: ${error.message || 'Unable to verify wallet signature with backend'}`);
+      // Don't show alert - let the UI handle the error display
+      console.error(`Wallet authentication failed: ${errorMessage}`);
       
       // Clear any stored data
       localStorage.removeItem('instinct_fi_wallet');
@@ -175,7 +185,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.removeItem('instinct_fi_token');
       apiClient.clearToken();
       
-      throw error; // Propagate error so user stays on login page
+      // Create a more descriptive error
+      const enhancedError = new Error(errorMessage);
+      enhancedError.cause = error;
+      throw enhancedError; // Propagate error so user stays on login page
     } finally {
       setIsLoading(false);
     }
