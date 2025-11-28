@@ -175,7 +175,7 @@ const Index = () => {
               <div className="text-xs text-zinc-600 uppercase tracking-widest">Community Members</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-emerald-400 font-mono mb-1">$50K+</div>
+              <div className="text-3xl font-bold text-emerald-400 font-mono mb-1">(SOON!)</div>
               <div className="text-xs text-zinc-600 uppercase tracking-widest">Volume Traded</div>
             </div>
           </div>
