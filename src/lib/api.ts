@@ -157,6 +157,7 @@ export const api = {
     getTrades: (id: string) => apiClient.get<any[]>(`/runs/${id}/trades`),
     getUnrealizedPnL: (id: string, round: number) => apiClient.get<{ unrealizedPnL: number | null }>(`/runs/${id}/trades/${round}/unrealized-pnl`),
     getCurrentVotingRound: (id: string) => apiClient.get<any>(`/runs/${id}/voting-round`),
+    getSystemLogs: (id: string, limit: number = 50) => apiClient.get<any[]>(`/runs/${id}/logs?limit=${limit}`),
     mintTestUsdc: (walletAddress: string, amount: number = 1000) => 
       apiClient.post<{ signature: string; amount: number; walletAddress: string }>('/runs/mint-test-usdc', { walletAddress, amount }),
   },

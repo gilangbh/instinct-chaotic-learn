@@ -1,13 +1,10 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/instinct/Button';
 import { Panel } from '@/components/ui/instinct/Panel';
 import { Badge } from '@/components/ui/instinct/Badge';
 import { toast } from 'sonner';
-import {
-  formatUSDC,
-  formatTime,
-} from '@/lib/mockData';
+import { formatUSDC, formatTime } from '@/lib/mockData';
 import { useMarket, useRuns } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,6 +22,7 @@ import {
   Clock,
   Users,
   Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   LineChart,
@@ -32,1070 +30,508 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  Area,
-  AreaChart,
 } from 'recharts';
 
-export default function ActiveGame() {
-  // ALL HOOKS MUST BE CALLED FIRST, IN THE SAME ORDER EVERY RENDER
+const ActiveGame = () => {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [userVote, setUserVote] = useState<'long' | 'short' | 'skip' | null>(null);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
-  const [displayTimeRemaining, setDisplayTimeRemaining] = useState<number>(0);
-  const redirectToastShown = useRef(false);
+  
+  const [vote, setVote] = useState<'long' | 'short' | 'skip' | null>(null);
+  const [chartData, setChartData] = useState<number[]>([]);
 
-  // Always call these hooks, even if runId is undefined
-  const enableQueries = Boolean(runId);
+  // Generate animated chart data
+  useEffect(() => {
+    const points = Array.from({ length: 50 }, (_, i) => {
+      return 50 + Math.sin(i * 0.15) * 15 + Math.sin(i * 0.5) * 5 + Math.random() * 8;
+    });
+    setChartData(points);
+  }, []);
+
+  // Fetch data
+  const enableQueries = Boolean(runId && user);
   const runQuery = useRuns.useGetRun(runId || '', { enabled: enableQueries });
-  const votingRoundQuery = useRuns.useGetCurrentVotingRound(runId || '', { enabled: enableQueries });
+  const run = runQuery.data?.data;
+  
+  // Only fetch voting round if run is ACTIVE
+  const votingRoundQuery = useRuns.useGetCurrentVotingRound(runId || '', { 
+    enabled: enableQueries && run?.status === 'ACTIVE' 
+  });
   const tradesQuery = useRuns.useGetRunTrades(runId || '', { enabled: enableQueries });
+  const systemLogsQuery = useRuns.useGetSystemLogs(runId || '', { enabled: enableQueries, limit: 20 });
   const castVoteMutation = useRuns.useCastVote();
   
   // WebSocket for real-time vote updates
   const { voteUpdate, isConnected: isWsConnected } = useVoteWebSocket(runId);
 
-  // Extract run data first before using it
-  const run = runQuery.data?.data;
   const currentVotingRound = votingRoundQuery.data?.data;
   const trades = tradesQuery.data?.data || [];
+  const systemLogs = systemLogsQuery.data?.data || [];
   
-  // Get last trade for unrealized PnL query
+  // Get last trade
   const lastTrade = trades.length > 0 ? trades[trades.length - 1] : null;
-  const lastTradeRound = lastTrade && lastTrade.exitPrice === null ? lastTrade.round : null;
-  
-  // Fetch unrealized PnL from Drift for open positions
-  const unrealizedPnLQuery = useRuns.useGetUnrealizedPnL(
-    runId || '', 
-    lastTradeRound || 0, 
-    { enabled: enableQueries && lastTradeRound !== null && lastTrade?.direction !== 'SKIP' }
-  );
-  const driftUnrealizedPnL = unrealizedPnLQuery.data?.data?.unrealizedPnL;
 
-  // Now we can safely use run for market queries - always call these hooks
-  const marketSymbol = run?.coin ?? run?.tradingPair?.split('/')[0] ?? '';
-  const marketSymbolEnabled = enableQueries && Boolean(marketSymbol);
-  const priceHistoryQuery = useMarket.useGetPriceHistory(marketSymbol, '1h', { enabled: marketSymbolEnabled });
-  const currentPriceQuery = useMarket.useGetCurrentPrice(marketSymbol, { enabled: marketSymbolEnabled });
-
-  const isLoading = runQuery.isLoading || runQuery.isFetching || votingRoundQuery.isLoading || votingRoundQuery.isFetching || !run;
+  const isLoading = runQuery.isLoading || !run;
   const shouldRedirect = Boolean(run) && run.status !== 'ACTIVE';
   const shouldRedirectToResults = Boolean(run) && run.status === 'ENDED';
 
-  // For active runs, use run.totalPool (includes PnL from trades)
-  // For waiting runs, use sum of participant deposits
-  const totalPoolCents = run?.status === 'ACTIVE' 
-    ? Math.max(0, run?.totalPool ?? 0) // Clamp to 0 minimum
-    : (run?.participants?.reduce((sum: number, participant: any) => {
-        return sum + (participant.depositAmount || 0);
-      }, 0) ?? 0);
-
-  const userParticipation = run?.participants?.find(
-    (p: any) => p.userId === user?.id || p.user?.id === user?.id
-  );
-
-  const userDepositCents = userParticipation?.depositAmount ?? 0;
-
-  // useEffect hooks - must be called after all useState/useRef/useQuery hooks
-  useEffect(() => {
-    const dataUpdatedAt = priceHistoryQuery.dataUpdatedAt;
-    if (dataUpdatedAt) {
-      setLastUpdateTime(new Date(dataUpdatedAt));
-    }
-  }, [priceHistoryQuery.dataUpdatedAt]);
-
-  // Use WebSocket vote update for time remaining if available
-  useEffect(() => {
-    if (voteUpdate && voteUpdate.runId === runId && voteUpdate.round === currentVotingRound?.round) {
-      setDisplayTimeRemaining(voteUpdate.timeRemaining);
-    }
-  }, [voteUpdate, runId, currentVotingRound?.round]);
-
-  // Calculate remaining time from server timestamp to prevent reset on refresh
-  useEffect(() => {
-    if (!currentVotingRound || !run) {
-      setDisplayTimeRemaining(0);
-      return;
-    }
-
-    const calculateRemainingTime = () => {
-      // Try to calculate from startedAt timestamp (preferred method)
-      if (currentVotingRound?.startedAt) {
-        const votingIntervalSeconds = run.votingInterval * 60; // Convert minutes to seconds
-        const startedAt = new Date(currentVotingRound.startedAt).getTime();
-        const now = Date.now();
-        const elapsed = Math.floor((now - startedAt) / 1000);
-        const remaining = Math.max(0, votingIntervalSeconds - elapsed);
-        return remaining;
-      }
-      
-      // Fallback to server-provided timeRemaining if startedAt is missing
-      if (currentVotingRound?.timeRemaining != null && currentVotingRound.timeRemaining > 0) {
-        return currentVotingRound.timeRemaining;
-      }
-      
-      return 0;
-    };
-
-    // Set initial time
-    const initialTime = calculateRemainingTime();
-    setDisplayTimeRemaining(initialTime);
-
-    // Update every second
-    const timer = window.setInterval(() => {
-      const remaining = calculateRemainingTime();
-      setDisplayTimeRemaining(remaining);
-      
-      // If time is up, invalidate queries to refresh data (backend should execute trade and create next round)
-      // Only invalidate once when timer expires, not continuously
-      if (remaining <= 0) {
-        clearInterval(timer);
-        // Invalidate queries to trigger refresh - backend should have executed trade and created next round
-        // Use a small delay to ensure backend has processed the round
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ['run', runId] });
-          queryClient.invalidateQueries({ queryKey: ['run', runId, 'voting-round'] });
-          queryClient.invalidateQueries({ queryKey: ['run', runId, 'trades'] });
-        }, 2000); // Wait 2 seconds for backend to process
-      }
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [currentVotingRound?.startedAt, currentVotingRound?.timeRemaining, currentVotingRound?.round, run?.votingInterval, run?.id, runId, queryClient]);
-
-  // Reset userVote when round changes (new round = can vote again)
-  useEffect(() => {
-    if (currentVotingRound?.round) {
-      // Reset vote state when round changes
-      setUserVote(null);
-    }
-  }, [currentVotingRound?.round]);
-
-  useEffect(() => {
-    if (!run) {
-      return;
-    }
-
-    if (!shouldRedirect) {
-      redirectToastShown.current = false;
-      return;
-    }
-
-    if (!redirectToastShown.current) {
-      if (run?.status === 'ENDED') {
-        toast.success('Run completed! Redirecting to results...');
-      } else {
-        toast.error('This run is not active');
-      }
-      redirectToastShown.current = true;
-    }
-  }, [run, shouldRedirect, shouldRedirectToResults]);
-
-  // Format chart data - useMemo must be called before any early returns
-  const priceHistoryData = priceHistoryQuery.data;
-  const currentPriceData = currentPriceQuery.data;
-
-  const chartData = useMemo(() => {
-    try {
-      if (priceHistoryData?.success && priceHistoryData.data) {
-        const priceData = priceHistoryData.data;
-        // Assuming the API returns an array of price objects with timestamp and price
-        return priceData.slice(-60).map((d: any) => ({
-          time: new Date(d.timestamp).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          price: parseFloat(d.price) || 0,
-        }));
-      }
-      return [];
-    } catch (error) {
-      console.error('Error formatting chart data:', error);
-      return [];
-    }
-  }, [priceHistoryData]);
-
-  // NOW we can do conditional logic and early returns (after all hooks)
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-subtle">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading game data...</p>
-        </div>
-      </div>
-    );
-  }
- 
-  // Redirect to results if run has ended
-  if (shouldRedirectToResults && runId) {
-    return <Navigate to={`/results/${runId}`} replace />;
-  }
-
-  // Redirect to dashboard if run is not active and not ended (e.g., WAITING, CANCELLED)
-  if (!runId || (shouldRedirect && !shouldRedirectToResults)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // Safe to access run properties now (after loading/redirect checks)
-  const profitLoss = run.totalPool - run.startingPool;
-  const profitLossPercent = run.startingPool > 0 
-    ? ((profitLoss / run.startingPool) * 100).toFixed(1)
-    : '0.0';
+  // Calculate pool and PnL
+  const totalPoolCents = run?.totalPool ?? 0;
+  const startingPoolCents = run?.startingPool ?? 0;
+  const profitLoss = totalPoolCents - startingPoolCents;
+  const profitLossPercent = startingPoolCents > 0 ? ((profitLoss / startingPoolCents) * 100).toFixed(2) : '0.00';
   const isProfit = profitLoss >= 0;
-  
-  // Get vote distribution for last trade from the corresponding voting round
-  const lastTradeVotingRound = lastTrade ? run?.votingRounds?.find(
-    (vr: any) => vr.round === lastTrade.round
-  ) : null;
-  const lastTradeVoteDistribution = lastTradeVotingRound?.voteDistribution as {
-    long?: number;
-    short?: number;
-    skip?: number;
-  } | null;
 
-  // Check if user has already voted in this round
-  const hasUserVoted = userVote !== null;
-  
-  // Also check if timer has expired (disable voting if time is up)
-  const isVotingClosed = displayTimeRemaining <= 0;
+  // Get user's participant data
+  const userParticipant = run?.participants?.find((p: any) => p.userId === user?.id);
+  const userDeposit = userParticipant?.depositAmount || 0;
 
-  const handleVote = async (vote: 'long' | 'short' | 'skip') => {
-    if (!currentVotingRound) {
+  // Handle vote submission
+  const handleVote = async (choice: 'long' | 'short' | 'skip') => {
+    if (!runId || !currentVotingRound) {
       toast.error('No active voting round');
       return;
     }
 
-    if (!runId) {
-      toast.error('Run ID is missing');
-      return;
-    }
-
-    if (hasUserVoted) {
-      toast.error('You have already voted in this round');
-      return;
-    }
-
-    if (isVotingClosed) {
-      toast.error('Voting time has expired');
-      return;
-    }
+    setVote(choice);
 
     try {
-      setUserVote(vote);
-      
-      const voteChoice = vote.toUpperCase();
-      console.log('Casting vote:', { runId, round: currentVotingRound.round, choice: voteChoice });
-      
       await castVoteMutation.mutateAsync({
         id: runId,
-        round: currentVotingRound.round,
-        choice: voteChoice,
+        data: {
+          round: currentVotingRound.round,
+          choice: choice.toUpperCase() as 'LONG' | 'SHORT' | 'SKIP',
+        },
       });
-
-      // Success toast is shown by mutation hook
-    } catch (error: any) {
-      console.error('Vote error:', error);
       
-      // If user already voted (409), keep the vote state
-      if (error?.response?.status === 409) {
-        const errorMessage = error?.response?.data?.error || error?.message || 'You have already voted';
-        toast.error(errorMessage);
-        // Don't reset userVote - user has already voted
-      } else {
-        setUserVote(null);
-        const errorMessage = error?.response?.data?.error || error?.message || 'Failed to cast vote';
-        toast.error(errorMessage);
-      }
+      toast.success(`Vote cast: ${choice.toUpperCase()}`);
+      
+      // Invalidate queries after a short delay to allow backend to process
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['run', runId, 'voting-round'] });
+        queryClient.invalidateQueries({ queryKey: ['run', runId, 'trades'] });
+      }, 2000);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cast vote');
+      setVote(null);
     }
   };
 
+  // Redirect logic
+  if (shouldRedirectToResults) {
+    return <Navigate to={`/results/${runId}`} replace />;
+  }
+
+  if (shouldRedirect) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!run) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Render chart
+  const renderChart = () => {
+    const max = Math.max(...chartData, 100);
+    const min = Math.min(...chartData, 0);
+    const path = chartData.map((val, i) => {
+      const x = (i / (chartData.length - 1)) * 100;
+      const y = 100 - ((val - min) / (max - min)) * 100;
+      return `${x},${y}`;
+    }).join(' ');
+
+    return (
+      <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="glow" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#00F0FF" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#00F0FF" stopOpacity="0" />
+          </linearGradient>
+          <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+            <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="0.5"/>
+          </pattern>
+          <mask id="mask-fade">
+            <linearGradient id="grad1" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
+              <stop offset="100%" stopColor="white" stopOpacity="1"/>
+            </linearGradient>
+            <rect x="0" y="0" width="100" height="100" fill="url(#grad1)" />
+          </mask>
+        </defs>
+        <rect width="100" height="100" fill="url(#grid)" />
+        <polyline 
+          points={path} 
+          fill="none" 
+          stroke="#00F0FF" 
+          strokeWidth="0.5" 
+          vectorEffect="non-scaling-stroke"
+          className="drop-shadow-[0_0_8px_rgba(0,240,255,0.8)]"
+          mask="url(#mask-fade)"
+        />
+        <polygon points={`0,100 ${path} 100,100`} fill="url(#glow)" mask="url(#mask-fade)" />
+        <line x1="100" y1="0" x2="100" y2="100" stroke="#00F0FF" strokeWidth="0.2" className="opacity-50">
+          <animate attributeName="x1" from="0" to="100" dur="5s" repeatCount="indefinite" />
+          <animate attributeName="x2" from="0" to="100" dur="5s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;1;0" dur="5s" repeatCount="indefinite" />
+        </line>
+        <circle cx="100" cy="50" r="1" fill="white" className="animate-pulse shadow-[0_0_10px_white]" />
+        <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.1)" strokeDasharray="2" strokeWidth="0.2" />
+      </svg>
+    );
+  };
+
+  // Format log timestamp
+  const formatLogTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  // Get log type color
+  const getLogTypeColor = (type: string) => {
+    switch (type) {
+      case 'CONSENSUS_REACHED': return 'text-emerald-500';
+      case 'USER_JOIN': return 'text-indigo-400';
+      case 'USER_LEAVE': return 'text-red-400';
+      case 'SIGNAL_DETECTED': return 'text-purple-400';
+      case 'TRADE_EXECUTED': return 'text-cyan-400';
+      case 'ROUND_START': return 'text-amber-400';
+      case 'ROUND_END': return 'text-orange-400';
+      case 'RUN_START': return 'text-green-500';
+      case 'RUN_END': return 'text-red-500';
+      default: return 'text-zinc-500';
+    }
+  };
+
+  // Get current round number
+  const currentRound = currentVotingRound?.round || run.currentRound || 1;
+
   return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Header */}
-      <div className="bg-card border-b border-border px-4 py-3 sticky top-0 z-10 shadow-soft-sm">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div className="text-center">
-            <div className="text-sm text-muted-foreground">Run #{run.id}</div>
-            <div className="font-bold text-foreground">{run.tradingPair}</div>
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="flex flex-col p-4 lg:p-6 max-w-[1800px] mx-auto animate-in zoom-in-95 duration-300 min-h-full">
+        <div className="flex justify-between items-center mb-4 border-b border-zinc-800 pb-4 relative z-10">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => navigate('/dashboard')} 
+              className="text-zinc-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
+            >
+              <ChevronRight className="rotate-180" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge label={`Run #${run.id.slice(0, 8)}`} color="zinc" />
+                <Badge label={`Round ${currentRound}/${run.totalRounds}`} color="indigo" />
+              </div>
+              <h2 className="text-3xl font-display font-bold text-white tracking-tight flex items-center gap-3">
+                {run.coin} / USDC 
+                <span className={`text-sm px-2 py-0.5 rounded border font-mono ${
+                  isProfit 
+                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
+                    : 'text-red-400 bg-red-500/10 border-red-500/20'
+                }`}>
+                  {isProfit ? '+' : ''}{profitLossPercent}%
+                </span>
+              </h2>
+            </div>
+            <Badge label={`Round ${currentRound}/${run.totalRounds}`} color="purple" pulse />
           </div>
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground">Round</div>
-            <div className="font-bold text-foreground">
-              {(() => {
-                // Calculate current round from votingRounds - rounds always count regardless of user votes
-                if (run.votingRounds && run.votingRounds.length > 0) {
-                  // Find the highest round number that's OPEN (current active round)
-                  const openRound = run.votingRounds.find((r: any) => r.status === 'OPEN');
-                  if (openRound) {
-                    return `${openRound.round}/${run.totalRounds}`;
-                  }
-                  
-                  // If no open round, find the highest round number from all voting rounds
-                  // This ensures rounds are counted even if user didn't vote
-                  const maxRound = Math.max(...run.votingRounds.map((r: any) => r.round || 0));
-                  
-                  // If run is still active and we haven't reached total rounds, show next round
-                  if (run.status === 'ACTIVE' && maxRound < run.totalRounds) {
-                    return `${maxRound + 1}/${run.totalRounds}`;
-                  }
-                  
-                  // Otherwise show the max round (all rounds completed)
-                  return `${maxRound}/${run.totalRounds}`;
-                }
-                
-                // Fallback: use currentRound field or calculate from run status
-                // If run is active but no voting rounds yet, it's round 1
-                if (run.status === 'ACTIVE') {
-                  const currentRound = run.currentRound && run.currentRound > 0 ? run.currentRound : 1;
-                  return `${currentRound}/${run.totalRounds}`;
-                }
-                
-                // For ended runs, show 0 or last known round
-                const currentRound = run.currentRound && run.currentRound > 0 ? run.currentRound : 0;
-                return `${currentRound}/${run.totalRounds}`;
-              })()}
+          
+          <div className="flex items-center gap-8 font-mono bg-zinc-900/50 border border-zinc-800 p-3 rounded-lg backdrop-blur-sm">
+            <div className="text-right px-2 hidden md:block">
+              <div className="text-[10px] text-zinc-500 uppercase">Pool Value</div>
+              <div className="text-xl text-[#00F0FF] font-bold text-shadow-glow">${formatUSDC(totalPoolCents)}</div>
+            </div>
+            <div className="w-px h-8 bg-zinc-800 hidden md:block" />
+            <div className="text-right px-2 hidden md:block">
+              <div className="text-[10px] text-zinc-500 uppercase">Your Stake</div>
+              <div className="text-xl text-zinc-200">${formatUSDC(userDeposit)}</div>
+            </div>
+            <div className="w-px h-8 bg-zinc-800 hidden md:block" />
+            <div className="text-right px-2 hidden md:block">
+              <div className="text-[10px] text-zinc-500 uppercase"># Players</div>
+              <div className="text-xl text-zinc-200">{run.participants?.length || 0}</div>
+            </div>
+            <div className="w-px h-8 bg-zinc-800 hidden md:block" />
+            <div className="text-right px-2 hidden lg:block">
+              <div className="text-[10px] text-zinc-500 uppercase">Your Votes</div>
+              <div className="text-xl text-zinc-200">
+                {userParticipant?.totalVotes || 0}/{currentRound - 1} 
+                <span className="text-sm text-emerald-400 ml-1">
+                  {userParticipant?.totalVotes ? Math.round((userParticipant.votesCorrect / userParticipant.totalVotes) * 100) : 0}%
+                </span>
+              </div>
+            </div>
+            <div className="w-px h-8 bg-zinc-800 hidden lg:block" />
+            <div className="text-right px-2">
+              <div className="text-[10px] text-zinc-500 uppercase">Timer</div>
+              <div className="text-2xl text-white font-bold animate-pulse text-red-500">
+                {formatTime(currentVotingRound?.timeRemaining || 0)}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto p-4 space-y-4">
-        {/* Top Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-sm text-muted-foreground mb-1">Total Pool</div>
-              <div className="text-2xl font-bold text-foreground">
-                {formatUSDC(totalPoolCents)} USDC
-              </div>
-              <div
-                className={`text-sm font-medium ${
-                  isProfit ? 'text-success' : 'text-destructive'
-                }`}
-              >
-                {isProfit ? '+' : ''}
-                {formatUSDC(profitLoss)} ({isProfit ? '+' : ''}
-                {profitLossPercent}%)
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-sm text-muted-foreground mb-1">Your Deposit</div>
-              <div className="text-2xl font-bold text-foreground">
-                {formatUSDC(userDepositCents)} USDC
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {userDepositCents > 0 && totalPoolCents > 0
-                  ? `${((userDepositCents / totalPoolCents) * 100).toFixed(1)}% of pool`
-                  : 'Spectating'}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
-                <Users className="w-4 h-4" />
-                Players
-              </div>
-              <div className="text-2xl font-bold text-foreground">{run.participantCount}</div>
-              <div className="text-sm text-muted-foreground">
-                {run.trades.length} trades executed
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="card-elevated">
-            <CardContent className="p-4">
-              <div className="text-sm text-muted-foreground mb-1">Your Votes</div>
-              <div className="text-2xl font-bold text-success">
-                {userParticipation?.votesCorrect || 0}/
-                {userParticipation?.totalVotes || 0}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {userParticipation && userParticipation.totalVotes > 0
-                  ? `${(
-                      (userParticipation.votesCorrect / userParticipation.totalVotes) *
-                      100
-                    ).toFixed(0)}% correct`
-                  : userParticipation
-                  ? 'No votes yet'
-                  : 'Not participating'}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-3 gap-4">
-          {/* Left Column - Chart and Last Trade */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Price Chart */}
-            <Card className="card-elevated">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-xl flex items-center gap-2 text-foreground">
-                      📊 {run.tradingPair}
-                    </CardTitle>
-                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      Last updated: {lastUpdateTime.toLocaleTimeString()}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-foreground">
-                      ${currentPriceData?.success && currentPriceData.data 
-                        ? currentPriceData.data.price.toFixed(2)
-                        : currentVotingRound?.currentPrice || '0.00'}
-                    </div>
-                    {currentPriceData?.success && currentPriceData.data ? (
-                      <div
-                        className={`text-sm ${
-                          (currentPriceData.data.change24h || 0) >= 0
-                            ? 'text-success'
-                            : 'text-destructive'
-                        }`}
-                      >
-                        {(currentPriceData.data.change24h || 0) >= 0 ? '+' : ''}
-                        {(currentPriceData.data.change24h || 0).toFixed(2)}% 24h
-                      </div>
-                    ) : currentVotingRound ? (
-                      <div
-                        className={`text-sm ${
-                          (currentVotingRound.priceChange24h ?? 0) >= 0
-                            ? 'text-success'
-                            : 'text-destructive'
-                        }`}
-                      >
-                        {(currentVotingRound.priceChange24h ?? 0) >= 0 ? '+' : ''}
-                        {currentVotingRound.priceChange24h ?? 0}% 24h
-                      </div>
-                    ) : null}
-                  </div>
+        <div className="flex-1 grid grid-cols-12 gap-4 min-h-0 relative z-10 overflow-y-auto custom-scrollbar pb-4">
+          <div className="col-span-12 lg:col-span-8 flex flex-col gap-4">
+            {/* Chart */}
+            <Panel className="h-[400px] lg:h-[500px] relative bg-[#000000]/60 overflow-hidden border-indigo-500/20 shadow-[inset_0_0_40px_rgba(0,0,0,0.8)]">
+              <div className="absolute inset-0 pointer-events-none opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-500/20 to-transparent" />
+              {renderChart()}
+              <div className="absolute top-4 left-4 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-mono text-[#00F0FF] bg-[#00F0FF]/10 px-3 py-1.5 border border-[#00F0FF]/30 backdrop-blur-md shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+                  <Activity size={14} /> LEVERAGE: <span className="font-bold">{currentVotingRound ? (currentVotingRound.leverage / 10).toFixed(1) : '?'}x</span>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  {priceHistoryQuery.isLoading ? (
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
-                        <p className="text-sm text-muted-foreground">Loading price data...</p>
-                      </div>
-                    </div>
-                  ) : priceHistoryQuery.error ? (
-                    <div className="h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <p className="text-sm text-destructive mb-2">Failed to load price data</p>
-                        <p className="text-xs text-muted-foreground">Using fallback display</p>
-                      </div>
-                    </div>
-                  ) : chartData.length === 0 ? (
-                    <div className="h-full flex items-center justify-center">
-                      <p className="text-sm text-muted-foreground">No price data available</p>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <defs>
-                          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis
-                          dataKey="time"
-                          stroke="hsl(var(--muted-foreground))"
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis
-                          stroke="hsl(var(--muted-foreground))"
-                          tick={{ fontSize: 12 }}
-                          domain={['dataMin - 1', 'dataMax + 1']}
-                          tickFormatter={(value) => `$${value.toFixed(2)}`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                            color: 'hsl(var(--foreground))'
-                          }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="price"
-                          stroke="hsl(var(--primary))"
-                          strokeWidth={3}
-                          fill="url(#priceGradient)"
-                          activeDot={{ 
-                            r: 4, 
-                            fill: 'hsl(var(--primary))',
-                            stroke: 'hsl(var(--background))',
-                            strokeWidth: 1
-                          }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
+                <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 border border-emerald-500/30 backdrop-blur-md">
+                  <Shield size={14} /> POSITION: {currentVotingRound ? (currentVotingRound.positionSize / 10).toFixed(0) : '?'}%
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-6 bg-black/80 border-t border-zinc-800 flex items-center overflow-hidden">
+                <div className="whitespace-nowrap text-[10px] font-mono text-zinc-500 animate-marquee flex gap-8 px-4">
+                  <span>BTC: $94,230 (+1.2%)</span>
+                  <span>ETH: $3,120 (-0.4%)</span>
+                  <span>SOL: $142.50 (+5.1%)</span>
+                  <span>LUNA: $0.00 (REKT)</span>
+                  <span>BTC: $94,230 (+1.2%)</span>
+                  <span>ETH: $3,120 (-0.4%)</span>
+                  <span>SOL: $142.50 (+5.1%)</span>
+                </div>
+              </div>
+            </Panel>
 
-            {/* Last Trade Result */}
+            {/* System Logs */}
+            <Panel className="mt-4 h-32 lg:h-40 p-4 font-mono text-xs overflow-y-auto custom-scrollbar bg-black border-t-0 shadow-inner">
+              <div className="text-zinc-500 mb-3 border-b border-zinc-800/50 pb-2 flex justify-between items-center sticky top-0 bg-black z-10">
+                <span className="flex items-center gap-2"><Terminal size={12}/> SYSTEM_LOGS</span>
+                <span className="text-[10px] text-emerald-500 animate-pulse">● LIVE FEED</span>
+              </div>
+              <div className="space-y-2">
+                {systemLogs.length > 0 ? (
+                  systemLogs.map((log: any, i: number) => (
+                    <div key={i} className="flex gap-3 text-zinc-500 hover:bg-zinc-900/30 p-1 rounded transition-colors">
+                      <span className="opacity-50">[{formatLogTime(log.createdAt)}]</span>
+                      <span className={`${getLogTypeColor(log.type)} font-bold`}>{log.type}</span>
+                      <span className="text-zinc-300">:: {log.message}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex gap-3 text-zinc-500 opacity-50 p-1">
+                    <span>[--:--:--]</span>
+                    <span className="animate-pulse">waiting for system events..._</span>
+                  </div>
+                )}
+              </div>
+            </Panel>
+            
+            {/* Last Round Result */}
             {lastTrade && (
-              <Card
-                className={`border-2 ${
-                  lastTrade.pnl >= 0
-                    ? 'bg-success/10 border-success/50'
-                    : 'bg-destructive/10 border-destructive/50'
-                }`}
-              >
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-foreground">
-                    {lastTrade.pnl >= 0 ? (
-                      <TrendingUp className="w-5 h-5 text-success" />
-                    ) : (
-                      <TrendingDown className="w-5 h-5 text-destructive" />
-                    )}
-                    Last Round Result (Round {lastTrade.round})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Decision</div>
-                      <div className="font-bold text-lg text-foreground">
-                        {lastTrade.direction.toUpperCase()}{' '}
-                        {lastTrade.direction.toLowerCase() === 'long' ? '📈' : 
-                         lastTrade.direction.toLowerCase() === 'short' ? '📉' : 
-                         '⏭️'}
-                      </div>
+              <Panel className="p-6 bg-zinc-900/50 border-zinc-800">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  {lastTrade.direction === 'LONG' ? (
+                    <TrendingUp size={14} className="text-cyan-400" />
+                  ) : (
+                    <TrendingDown size={14} className="text-red-400" />
+                  )} Last Round Result (Round {lastTrade.round})
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[10px] text-zinc-600 uppercase mb-1">Decision</div>
+                    <div className={`text-lg font-display font-bold flex items-center gap-2 ${
+                      lastTrade.direction === 'LONG' ? 'text-cyan-400' : 
+                      lastTrade.direction === 'SHORT' ? 'text-red-400' : 'text-zinc-400'
+                    }`}>
+                      {lastTrade.direction} {lastTrade.direction === 'LONG' ? <TrendingUp size={16} /> : lastTrade.direction === 'SHORT' ? <TrendingDown size={16} /> : null}
                     </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Strategy</div>
-                      <div className="font-bold text-lg text-foreground">
-                        {(() => {
-                          // Convert from tenths format (stored as integers)
-                          // e.g., 67 = 6.7x, 865 = 86.5%
-                          const rawLeverage = typeof lastTrade.leverage === 'number'
-                            ? lastTrade.leverage
-                            : parseFloat(String(lastTrade.leverage)) || 10;
-                          const rawPositionSize = typeof lastTrade.positionSize === 'number'
-                            ? lastTrade.positionSize
-                            : parseFloat(String(lastTrade.positionSize)) || 50;
-                          
-                          // New format: values >= 10 are stored as tenths (10 = 1.0x, 200 = 20.0x)
-                          // Old format: values 1-20 are direct (1 = 1.0x, 20 = 20.0x)
-                          const leverage = rawLeverage >= 10 
-                            ? (rawLeverage / 10).toFixed(1) 
-                            : rawLeverage.toFixed(1);
-                          
-                          // Position size: values >= 100 are stored as tenths (100 = 10.0%, 1000 = 100.0%)
-                          // Old format: values 10-100 are direct (10 = 10%, 100 = 100%)
-                          const positionSize = rawPositionSize >= 100
-                            ? (rawPositionSize / 10).toFixed(1)
-                            : rawPositionSize.toFixed(1);
-                          
-                          // Clamp to valid ranges
-                          const leverageNum = parseFloat(leverage);
-                          const positionSizeNum = parseFloat(positionSize);
-                          const clampedLeverage = Math.max(1, Math.min(20, leverageNum)).toFixed(1);
-                          const clampedPositionSize = Math.max(10, Math.min(100, positionSizeNum)).toFixed(1);
-                          
-                          return `${clampedLeverage}x leverage, ${clampedPositionSize}% size`;
-                        })()}
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-zinc-600 uppercase mb-1">Strategy</div>
+                    <div className="text-sm text-zinc-300 font-mono">
+                      {(lastTrade.leverage / 10).toFixed(1)}x leverage, {(lastTrade.positionSize / 10).toFixed(0)}% size
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-zinc-600 uppercase mb-1">Entry → Exit</div>
+                    <div className="text-sm text-zinc-300 font-mono">
+                      ${parseFloat(lastTrade.entryPrice.toString()).toFixed(2)} → {lastTrade.exitPrice ? `$${parseFloat(lastTrade.exitPrice.toString()).toFixed(2)}` : 'Open'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-zinc-600 uppercase mb-1">Result</div>
+                    <div className={`text-lg font-display font-bold ${
+                      lastTrade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {lastTrade.pnl >= 0 ? '+' : ''}{formatUSDC(lastTrade.pnl)} USDC
+                    </div>
+                  </div>
+                </div>
+                
+                {currentVotingRound?.voteDistribution && (
+                  <div className="mt-4 pt-4 border-t border-zinc-800">
+                    <div className="text-[10px] text-zinc-600 uppercase mb-2">Vote Distribution</div>
+                    <div className="flex items-center gap-4 text-sm font-mono">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp size={14} className="text-cyan-400" />
+                        <span className="text-zinc-500">LONG:</span>
+                        <span className="text-cyan-400">{(currentVotingRound.voteDistribution as any).long || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <TrendingDown size={14} className="text-red-400" />
+                        <span className="text-zinc-500">SHORT:</span>
+                        <span className="text-red-400">{(currentVotingRound.voteDistribution as any).short || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Shield size={14} className="text-zinc-500" />
+                        <span className="text-zinc-500">SKIP:</span>
+                        <span className="text-zinc-400">{(currentVotingRound.voteDistribution as any).skip || 0}</span>
                       </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Entry → Exit</div>
-                      <div className="font-medium text-foreground">
-                        {lastTrade.entryPrice && Number(lastTrade.entryPrice) > 0 ? (
-                          <>
-                            ${Number(lastTrade.entryPrice).toFixed(2)} → {lastTrade.exitPrice ? (
-                              `$${Number(lastTrade.exitPrice).toFixed(2)}`
-                            ) : (
-                              currentPriceData?.success && currentPriceData.data ? (
-                                <span className="text-muted-foreground">
-                                  ${currentPriceData.data.price.toFixed(2)} <span className="text-xs">(Open)</span>
-                                </span>
-                              ) : (
-                                'Open'
-                              )
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">
-                            Entry price unavailable
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">
-                        Result
-                      </div>
-                      <div className="space-y-1">
-                        {/* Total Run PnL */}
-                        <div className="text-xs text-muted-foreground">
-                          Total Run: {lastTrade.pnl >= 0 ? '+' : ''}
-                          {formatUSDC(lastTrade.pnl)} USDC
-                        </div>
-                        {/* User's Personal PnL */}
-                        {userParticipation && userDepositCents > 0 && (() => {
-                          // Calculate pool at trade time
-                          const previousClosedTrades = trades.filter(
-                            (t: any) => t.round < lastTrade.round && t.exitPrice !== null && t.exitPrice !== undefined
-                          );
-                          const previousPnL = previousClosedTrades.reduce(
-                            (sum: number, t: any) => sum + (t.pnl || 0),
-                            0
-                          );
-                          const poolAtTradeTime = (run?.startingPool || 0) + previousPnL;
-                          
-                          // User's share percentage of the pool at trade time
-                          const userSharePercent = poolAtTradeTime > 0 
-                            ? (userDepositCents / poolAtTradeTime) * 100 
-                            : 0;
-                          
-                          // Check if trade is closed or open
-                          const isTradeClosed = lastTrade.exitPrice !== null && lastTrade.exitPrice !== undefined;
-                          
-                          let userBasePnL: number;
-                          let userTotalPnL: number;
-                          let userBonus = 0;
-                          
-                          if (isTradeClosed) {
-                            // For closed trades, use actual PnL
-                            userBasePnL = (lastTrade.pnl * userSharePercent) / 100;
-                            
-                            // Calculate bonus if trade was profitable and user voted correctly
-                            if (lastTrade.pnl > 0 && userParticipation) {
-                              // Estimate bonus based on vote accuracy (1% per correct vote on profit share)
-                              const userVoteAccuracy = userParticipation.totalVotes > 0
-                                ? userParticipation.votesCorrect / userParticipation.totalVotes
-                                : 0;
-                              
-                              const estimatedBonusPercent = Math.min(userVoteAccuracy * 100, 12); // Max 12%
-                              userBonus = (userBasePnL * estimatedBonusPercent) / 100;
-                            }
-                            
-                            userTotalPnL = userBasePnL + userBonus;
-                          } else {
-                            // For open trades, calculate unrealized PnL
-                            let unrealizedPnL = 0;
-                            
-                            if (driftUnrealizedPnL !== null && driftUnrealizedPnL !== undefined) {
-                              // Use Drift's actual unrealized PnL
-                              unrealizedPnL = driftUnrealizedPnL;
-                            } else if (currentPriceData?.success && currentPriceData.data && lastTrade.entryPrice) {
-                              // Calculate manually
-                              const entryPrice = Number(lastTrade.entryPrice);
-                              const currentPrice = currentPriceData.data.price;
-                              const direction = lastTrade.direction.toLowerCase();
-                              
-                              const rawLeverage = typeof lastTrade.leverage === 'number'
-                                ? lastTrade.leverage
-                                : parseFloat(String(lastTrade.leverage)) || 10;
-                              const rawPositionSize = typeof lastTrade.positionSize === 'number'
-                                ? lastTrade.positionSize
-                                : parseFloat(String(lastTrade.positionSize)) || 50;
-                              
-                              const leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
-                              const positionSizePercent = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
-                              
-                              const positionSizeCents = (poolAtTradeTime * positionSizePercent) / 100;
-                              
-                              if (entryPrice > 0) {
-                                const priceChange = direction === 'long' 
-                                  ? (currentPrice - entryPrice) / entryPrice
-                                  : (entryPrice - currentPrice) / entryPrice;
-                                
-                                unrealizedPnL = positionSizeCents * leverage * priceChange;
-                              }
-                            }
-                            
-                            // User's share of unrealized PnL
-                            userBasePnL = (unrealizedPnL * userSharePercent) / 100;
-                            userTotalPnL = userBasePnL; // No bonus on unrealized PnL
-                          }
-                          
-                          return (
-                      <div
-                        className={`font-bold text-lg ${
-                                userTotalPnL >= 0 ? 'text-success' : 'text-destructive'
-                              }`}
-                            >
-                              Your Share: {userTotalPnL >= 0 ? '+' : ''}
-                              {formatUSDC(Math.round(userTotalPnL))} USDC
-                              {!isTradeClosed && (
-                                <span className="text-xs font-normal text-muted-foreground block">
-                                  (Unrealized)
-                                </span>
-                              )}
-                              {isTradeClosed && userBonus > 0 && (
-                                <span className="text-xs font-normal text-muted-foreground block">
-                                  (Base: {formatUSDC(Math.round(userBasePnL))} + Bonus: {formatUSDC(Math.round(userBonus))})
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {lastTradeVoteDistribution && (
-                  <div className="bg-muted rounded p-3">
-                    <div className="text-sm text-muted-foreground mb-2">Vote Distribution</div>
-                    <div className="flex gap-4 text-sm text-foreground">
-                      <span>
-                          📈 LONG: <span className="font-bold">{lastTradeVoteDistribution.long ?? 0}</span>
-                      </span>
-                      <span>
-                        📉 SHORT:{' '}
-                          <span className="font-bold">{lastTradeVoteDistribution.short ?? 0}</span>
-                      </span>
-                      <span>
-                          ⏭️ SKIP: <span className="font-bold">{lastTradeVoteDistribution.skip ?? 0}</span>
-                      </span>
-                    </div>
-                  </div>
-                  )}
-                </CardContent>
-              </Card>
+                )}
+              </Panel>
             )}
           </div>
 
-          {/* Right Column - Voting Interface */}
-          <div className="space-y-4">
-            {/* Countdown Timer */}
-            {currentVotingRound ? (
-            <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-              <CardContent className="p-6">
-                <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    Time to Vote
-                  </div>
-                  <div className="text-5xl font-mono font-bold text-primary mb-2">
-                      {formatTime(displayTimeRemaining)}
-                  </div>
-                  <Progress
-                      value={(displayTimeRemaining / (run.votingInterval * 60)) * 100}
-                    className="h-2"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-            ) : (
-              <Card className="bg-gradient-hero border-primary/30 shadow-soft-lg">
-                <CardContent className="p-6">
-                  <div className="text-center">
-                    <div className="text-sm text-muted-foreground mb-2 flex items-center justify-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Round Status
-                    </div>
-                    <div className="text-2xl font-bold text-primary mb-2">
-                      ⏳ Waiting for Next Round
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      Trade execution in progress...
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
+          <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
             {/* This Round's Strategy */}
-            {currentVotingRound ? (
-            <Card className="card-elevated">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-foreground">
-                  🎲 This Round's Strategy
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground flex items-center gap-2">
-                      <Zap className="w-4 h-4" />
-                      Leverage
-                    </span>
-                    <span className="text-2xl font-bold text-warning">
-                        {(() => {
-                          // Backend stores as tenths (e.g., 153 = 15.3x), convert back
-                          // Handle both old format (direct values 1-20) and new format (tenths 10-200)
-                          const rawLeverage = typeof currentVotingRound.leverage === 'number'
-                            ? currentVotingRound.leverage
-                            : parseFloat(String(currentVotingRound.leverage)) || 10;
-                          
-                          // New format: values >= 10 are stored as tenths (10 = 1.0x, 200 = 20.0x)
-                          // Old format: values 1-20 are direct (1 = 1.0x, 20 = 20.0x)
-                          // If value is >= 10, divide by 10; otherwise use as-is
-                          let leverage = rawLeverage >= 10 ? rawLeverage / 10 : rawLeverage;
-                          
-                          // Ensure it's within valid range (1-20x) - clamp if out of range
-                          leverage = Math.max(1, Math.min(20, leverage));
-                          
-                          return leverage.toFixed(1);
-                        })()}x
+            {currentVotingRound && (
+              <Panel className="p-4 bg-zinc-900/50 border-amber-500/20">
+                <h3 className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <Dice5 size={14} /> This Round's Strategy
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-zinc-500">Leverage</span>
+                    <span className="text-lg font-mono font-bold text-amber-400">
+                      {(currentVotingRound.leverage / 10).toFixed(1)}x
                     </span>
                   </div>
-                </div>
-
-                <div className="bg-secondary/10 border border-secondary/30 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground flex items-center gap-2">
-                      <Target className="w-4 h-4" />
-                      Position Size
-                    </span>
-                    <span className="text-2xl font-bold text-secondary">
-                        {(() => {
-                          // Backend stores as tenths (e.g., 457 = 45.7%), convert back
-                          // Handle both old format (direct values 10-100) and new format (tenths 100-1000)
-                          const rawPositionSize = typeof currentVotingRound.positionSize === 'number'
-                            ? currentVotingRound.positionSize
-                            : parseFloat(String(currentVotingRound.positionSize)) || 100;
-                          
-                          // New format: values >= 100 are stored as tenths (100 = 10.0%, 1000 = 100.0%)
-                          // Old format: values 10-100 are direct (10 = 10.0%, 100 = 100.0%)
-                          // If value is >= 100, divide by 10; otherwise use as-is
-                          let positionSize = rawPositionSize >= 100 ? rawPositionSize / 10 : rawPositionSize;
-                          
-                          // Ensure it's within valid range (10-100%) - clamp if out of range
-                          positionSize = Math.max(10, Math.min(100, positionSize));
-                          
-                          return positionSize.toFixed(1);
-                        })()}%
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-zinc-500">Position Size</span>
+                    <span className="text-lg font-mono font-bold text-zinc-300">
+                      {(currentVotingRound.positionSize / 10).toFixed(0)}%
                     </span>
                   </div>
-                </div>
-
-                <div className="text-xs text-muted-foreground text-center mt-2">
-                  Chaos parameters are random each round! 🎰
-                </div>
-              </CardContent>
-            </Card>
-            ) : (
-              <Card className="card-elevated">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-foreground">
-                    ⏳ Waiting for Next Round
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-4">
-                    <div className="text-muted-foreground mb-2">
-                      The previous voting round has ended.
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      The trade is being executed and the next round will start shortly...
-                    </div>
+                  <div className="text-[10px] text-zinc-600 mt-2 border-t border-zinc-800 pt-2">
+                    Chaos parameters are random each round 🎲
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </Panel>
             )}
+            
+            {/* Voting Panel */}
+            <Panel className="p-6 flex-1 flex flex-col gap-4 justify-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
+              <div className="text-center mb-4 relative z-10">
+                <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest flex items-center justify-center gap-2">
+                  <Scan size={16} className="text-indigo-500"/> Input Command
+                </h3>
+                <p className="text-xs text-zinc-600 mt-1">Predict the next price action</p>
+              </div>
+              <Button 
+                variant="long" 
+                className="h-24 text-lg flex items-center justify-between group relative overflow-visible"
+                onClick={() => handleVote('long')}
+                active={vote === 'long'}
+                disabled={!currentVotingRound || castVoteMutation.isPending}
+              >
+                <span className="flex flex-col items-start z-10">
+                  <span className="font-display font-bold text-2xl tracking-wide">LONG</span>
+                  <span className="text-[10px] opacity-80 font-mono uppercase text-cyan-200">Expect Upside</span>
+                </span>
+                <div className="relative z-10 bg-[#00F0FF]/10 p-3 rounded-full group-hover:bg-[#00F0FF]/20 group-hover:scale-110 transition-all duration-300 border border-[#00F0FF]/30">
+                  <TrendingUp size={28} className="group-hover:-translate-y-1 transition-transform" />
+                </div>
+                <div className="absolute inset-0 bg-[#00F0FF]/5 blur-xl group-hover:bg-[#00F0FF]/10 transition-colors" />
+              </Button>
+              <Button 
+                variant="short" 
+                className="h-24 text-lg flex items-center justify-between group relative overflow-visible"
+                onClick={() => handleVote('short')}
+                active={vote === 'short'}
+                disabled={!currentVotingRound || castVoteMutation.isPending}
+              >
+                <span className="flex flex-col items-start z-10">
+                  <span className="font-display font-bold text-2xl tracking-wide">SHORT</span>
+                  <span className="text-[10px] opacity-80 font-mono uppercase text-rose-200">Expect Downside</span>
+                </span>
+                <div className="relative z-10 bg-[#FF2A6D]/10 p-3 rounded-full group-hover:bg-[#FF2A6D]/20 group-hover:scale-110 transition-all duration-300 border border-[#FF2A6D]/30">
+                  <TrendingDown size={28} className="group-hover:translate-y-1 transition-transform" />
+                </div>
+                <div className="absolute inset-0 bg-[#FF2A6D]/5 blur-xl group-hover:bg-[#FF2A6D]/10 transition-colors" />
+              </Button>
+              <Button 
+                variant="neutral" 
+                onClick={() => handleVote('skip')} 
+                active={vote === 'skip'} 
+                className="h-16 opacity-70 hover:opacity-100"
+                disabled={!currentVotingRound || castVoteMutation.isPending}
+              >
+                <span className="text-xs tracking-widest">SKIP ROUND (CONSERVE)</span>
+              </Button>
+              
+              <div className="text-[10px] text-center text-zinc-600 font-mono mt-2 border-t border-zinc-800 pt-2">
+                Votes are hidden until the round ends. No penalties for missing votes!
+              </div>
+            </Panel>
 
-            {/* Voting Buttons */}
-            {currentVotingRound ? (
-            <Card className="card-elevated">
-              <CardHeader>
-                  <div className="flex items-center justify-between">
-                <CardTitle className="text-lg text-foreground">🗳️ Cast Your Vote</CardTitle>
-                    {isWsConnected && (
-                      <Badge variant="outline" className="text-xs">
-                        🔴 Live
-                      </Badge>
-                    )}
-                  </div>
-                  {/* Real-time vote counts from WebSocket */}
-                  {voteUpdate && voteUpdate.runId === runId && voteUpdate.round === currentVotingRound?.round && (
-                    <div className="mt-3 flex items-center justify-around gap-2 text-sm">
-                      <div className="flex items-center gap-1">
-                        <span className="text-success">📈 LONG:</span>
-                        <span className="font-bold">{voteUpdate.voteDistribution.long}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-destructive">📉 SHORT:</span>
-                        <span className="font-bold">{voteUpdate.voteDistribution.short}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-muted-foreground">⏭️ SKIP:</span>
-                        <span className="font-bold">{voteUpdate.voteDistribution.skip}</span>
-                      </div>
-                    </div>
-                  )}
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button
-                  className={`w-full h-20 text-lg font-bold shadow-soft-sm text-white transition-colors ${
-                    userVote === 'long'
-                      ? 'bg-[hsl(var(--success))] hover:bg-[hsl(var(--success))]'
-                      : 'bg-[hsl(var(--success))]/80 hover:bg-[hsl(var(--success))]'
-                  }`}
-                  onClick={() => handleVote('long')}
-                  disabled={hasUserVoted || isVotingClosed}
-                >
-                  <div className="flex items-center gap-3">
-                    <ArrowUp className="w-6 h-6" />
-                    <div>
-                      <div>LONG (BUY)</div>
-                      <div className="text-sm font-normal">
-                        Price will go UP 📈
-                      </div>
-                    </div>
-                    {userVote === 'long' && <span className="ml-2">✅</span>}
-                  </div>
-                </Button>
-
-                <Button
-                  className={`w-full h-20 text-lg font-bold shadow-soft-sm text-white transition-colors ${
-                    userVote === 'short'
-                      ? 'bg-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive))]'
-                      : 'bg-[hsl(var(--destructive))]/80 hover:bg-[hsl(var(--destructive))]'
-                  }`}
-                  onClick={() => handleVote('short')}
-                  disabled={hasUserVoted || isVotingClosed}
-                >
-                  <div className="flex items-center gap-3">
-                    <ArrowDown className="w-6 h-6" />
-                    <div>
-                      <div>SHORT (SELL)</div>
-                      <div className="text-sm font-normal">
-                        Price will go DOWN 📉
-                      </div>
-                    </div>
-                    {userVote === 'short' && <span className="ml-2">✅</span>}
-                  </div>
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className={`w-full h-16 text-lg font-bold ${
-                    userVote === 'skip'
-                      ? 'border-primary bg-primary/10'
-                      : ''
-                  }`}
-                  onClick={() => handleVote('skip')}
-                  disabled={hasUserVoted || isVotingClosed}
-                >
-                  <div className="flex items-center gap-3">
-                    <SkipForward className="w-5 h-5" />
-                    <div>SKIP (PASS) ⏭️</div>
-                    {userVote === 'skip' && <span className="ml-2">✅</span>}
-                  </div>
-                </Button>
-
-                {userVote && (
-                  <div className="bg-success/10 border border-success/30 rounded-lg p-3 text-center text-sm text-foreground">
-                    ✅ Vote recorded! Check back when the round ends.
-                  </div>
-                )}
-
-                {!userVote && (
-                  <div className="text-xs text-muted-foreground text-center">
-                    Votes are hidden until the round ends. No penalties for missing
-                    votes!
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            ) : (
-              <Card className="card-elevated">
-                <CardHeader>
-                  <CardTitle className="text-lg text-foreground">⏸️ Voting Closed</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-4">
-                    <div className="text-muted-foreground mb-2">
-                      This voting round has ended.
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      The trade is being executed. The next round will start automatically.
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Participants */}
-            <Card className="card-elevated">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-foreground">
-                  <Users className="w-5 h-5" />
-                  Players ({run.participants?.length || run.participantCount || 0})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {run.participants.map((participant, index) => (
-                    <div
-                      key={participant.user.id}
-                      className={`flex items-center justify-between p-2 rounded ${
-                        participant.user.id === user?.id
-                          ? 'bg-primary/10 border border-primary/30'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'var(--gradient-primary)' }}>
-                          {index + 1}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-foreground">
-                            {participant.user.username}
-                            {participant.user.id === user?.id && (
-                              <Badge
-                                variant="outline"
-                                className="ml-2 text-xs border-primary text-primary"
-                              >
-                                You
-                              </Badge>
+            {/* Participants Panel */}
+            <Panel className="p-4 max-h-64 flex flex-col">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
+                  <Globe size={12}/> Node Network ({run.participants?.length || 0})
+                </span>
+                <Badge label={`ACC: ${userParticipant?.totalVotes ? Math.round((userParticipant.votesCorrect / userParticipant.totalVotes) * 100) : 0}%`} color="cyan" />
+              </div>
+              <div className="space-y-2 overflow-y-auto pr-2 custom-scrollbar flex-1">
+                {run.participants?.map((p: any, i: number) => {
+                  const accuracy = p.totalVotes > 0 ? Math.round((p.votesCorrect / p.totalVotes) * 100) : 50;
+                  
+                  return (
+                    <div key={i} className="flex justify-between items-center p-2 bg-zinc-900/30 border border-zinc-800/30 rounded-sm hover:border-indigo-500/30 hover:bg-indigo-500/5 transition-all group">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`w-1 h-10 transition-all group-hover:scale-y-110 ${
+                          accuracy >= 60 ? 'bg-emerald-500' : accuracy >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                        }`} />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-zinc-300 font-mono font-bold group-hover:text-white">
+                              {p.user?.username || 'Anonymous'}
+                            </span>
+                            {p.userId === user?.id && (
+                              <Badge label="You" color="indigo" />
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatUSDC(participant.depositAmount)} USDC
-                          </div>
+                          <div className="text-[10px] text-zinc-600">${formatUSDC(p.depositAmount)} USDC</div>
                         </div>
                       </div>
-                      <div className="text-right text-xs">
-                        <div className="text-success">
-                          {participant.votesCorrect}/{participant.totalVotes}
+                      <div className="text-right">
+                        <div className={`text-xs font-mono font-bold ${
+                          accuracy >= 60 ? 'text-emerald-400' : accuracy >= 40 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
+                          {accuracy}%
                         </div>
-                        <div className="text-muted-foreground">correct</div>
+                        <div className="text-[9px] text-zinc-600">correct</div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  );
+                })}
+              </div>
+            </Panel>
           </div>
         </div>
       </div>
     </div>
   );
-}
+};
 
+export default ActiveGame;

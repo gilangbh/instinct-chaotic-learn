@@ -34,3 +34,5 @@ export const Typewriter = ({ text, speed = 30, delay = 0 }: TypewriterProps) => 
 
 
 
+
+
