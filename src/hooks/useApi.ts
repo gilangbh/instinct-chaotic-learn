@@ -165,8 +165,20 @@ export const useRuns = {
       queryKey: ['run', id, 'voting-round'],
       queryFn: () => api.runs.getCurrentVotingRound(id),
       enabled: options?.enabled ?? !!id,
+      retry: false, // Don't retry on 404 - it's expected when no voting round exists
       refetchInterval: 60000, // Refetch every 60 seconds (backup sync, WebSocket handles real-time)
       refetchOnWindowFocus: true, // Refetch when user returns to tab
+    });
+  },
+
+  // Get system logs for a run
+  useGetSystemLogs: (id: string, options?: { enabled?: boolean; limit?: number }) => {
+    return useQuery({
+      queryKey: ['run', id, 'logs', options?.limit || 50],
+      queryFn: () => api.runs.getSystemLogs(id, options?.limit || 50),
+      enabled: options?.enabled ?? !!id,
+      refetchInterval: 10000, // Refetch every 10 seconds for live feed
+      refetchOnWindowFocus: true,
     });
   },
 

@@ -20,3 +20,5 @@ export const ProgressBar = ({ value, max, color = "bg-indigo-500" }: ProgressBar
   );
 };
 
+
+
