@@ -297,8 +297,8 @@ const Index = () => {
                 <span className="text-xl font-display font-light text-white group-hover:text-indigo-400 transition-colors">instinctfi<span className="text-indigo-500 font-bold">.xyz</span></span>
               </div>
               <div className="flex items-center gap-6 text-sm text-zinc-500">
-                <button className="hover:text-indigo-400 transition-colors font-mono">Twitter</button>
-                <button className="hover:text-indigo-400 transition-colors font-mono">Discord</button>
+                <a href="https://x.com/instinctfi" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 transition-colors font-mono">Twitter</a>
+                <a href="https://discord.gg/56WgkYsVUe" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-400 transition-colors font-mono">Discord</a>
                 <button className="hover:text-indigo-400 transition-colors font-mono">Docs</button>
               </div>
             </div>
