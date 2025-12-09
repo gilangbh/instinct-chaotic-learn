@@ -30,20 +30,13 @@ export function DepositDialog({
   minDeposit = 10, 
   maxDeposit = 100 
 }: DepositDialogProps) {
-  const { publicKey, sendTransaction, connected } = useWallet();
+  const { publicKey, sendTransaction, connected, wallet } = useWallet();
   const { connection } = useConnection();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [isDepositing, setIsDepositing] = useState(false);
   const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
   const [solBalance, setSolBalance] = useState<number | null>(null);
-
-  // Fetch balances when dialog opens or wallet connects
-  useEffect(() => {
-    if (open && publicKey && connected) {
-      fetchBalances();
-    }
-  }, [open, publicKey, connected]);
 
   const fetchBalances = async () => {
     if (!publicKey || !connected) return;
@@ -70,6 +63,35 @@ export function DepositDialog({
       console.error('Error fetching balances:', error);
     }
   };
+
+  // Fetch balances when dialog opens or wallet connects
+  useEffect(() => {
+    if (open && publicKey && connected) {
+      // Small delay to ensure wallet adapter state is fully updated
+      const timer = setTimeout(() => {
+        fetchBalances();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [open, publicKey, connected]);
+
+  // Force refresh when wallet connection state changes
+  useEffect(() => {
+    if (!open) return;
+
+    if (connected && publicKey) {
+      console.log('🔌 Wallet connected in DepositDialog, refreshing balances...');
+      // Small delay to ensure wallet adapter state is fully updated
+      const timer = setTimeout(() => {
+        fetchBalances();
+      }, 300);
+      return () => clearTimeout(timer);
+    } else if (!connected) {
+      // Clear balances when disconnected
+      setUsdcBalance(null);
+      setSolBalance(null);
+    }
+  }, [open, connected, publicKey?.toString(), fetchBalances]);
 
   const handleDeposit = async () => {
     if (!connected || !publicKey) {
