@@ -22,7 +22,7 @@ export default function Lobby() {
   const navigate = useNavigate();
   const { runId } = useParams<{ runId: string }>();
   const { user } = useAuth();
-  const { publicKey, sendTransaction, connected } = useWallet();
+  const { publicKey, sendTransaction, connected, wallet } = useWallet();
   const { connection } = useConnection();
   
   const [depositAmount, setDepositAmount] = useState('50');
@@ -31,6 +31,7 @@ export default function Lobby() {
   const [isDepositing, setIsDepositing] = useState(false);
   const [usdcBalance, setUsdcBalance] = useState<number | null>(null);
   const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [walletConnected, setWalletConnected] = useState(false);
 
   // Fetch run data from API (MUST be before early returns)
   const { data: runResponse, isLoading: runLoading } = useRuns.useGetRun(runId || '');
@@ -110,6 +111,38 @@ export default function Lobby() {
       console.error('Error fetching balances:', error);
     }
   }, [publicKey, connected, connection]);
+
+  // Listen for wallet connection events and refresh UI
+  useEffect(() => {
+    if (connected && publicKey) {
+      setWalletConnected(true);
+      // Small delay to ensure wallet adapter state is fully updated
+      const timer = setTimeout(() => {
+        fetchBalances();
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      setWalletConnected(false);
+      setUsdcBalance(null);
+      setSolBalance(null);
+    }
+  }, [connected, publicKey, fetchBalances]);
+
+  // Force refresh when wallet connection state changes
+  useEffect(() => {
+    if (connected && publicKey) {
+      console.log('🔌 Wallet connected, refreshing balances...');
+      // Small delay to ensure wallet adapter state is fully updated
+      const timer = setTimeout(() => {
+        fetchBalances();
+      }, 300);
+      return () => clearTimeout(timer);
+    } else if (!connected) {
+      // Clear balances when disconnected
+      setUsdcBalance(null);
+      setSolBalance(null);
+    }
+  }, [connected, publicKey?.toString(), fetchBalances]);
 
   // Fetch wallet balances when connected (MUST be before early returns)
   useEffect(() => {
