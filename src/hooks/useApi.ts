@@ -1,7 +1,8 @@
 // React Query hooks for Instinct.fi API
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { User, Run, CreateUserRequest, JoinRunRequest, CastVoteRequest, UserStats, UserLevelInfo } from '@/lib/types';
+import { User, Run, CreateUserRequest, JoinRunRequest, CastVoteRequest, UserStats, UserLevelInfo, ExtendedUserStats, Item, LoadoutItem, ItemWithLoadout, ActiveBuffs, Achievement, VoteChoice } from '@/lib/types';
 import { toast } from 'sonner';
 
 // User hooks
@@ -51,6 +52,24 @@ export const useUsers = {
     });
   },
 
+  // Get extended user statistics (NAV, Global Rank, etc.)
+  useGetExtendedUserStats: (id: string) => {
+    return useQuery({
+      queryKey: ['user', id, 'extended-stats'],
+      queryFn: () => api.users.getExtendedStats(id),
+      enabled: !!id,
+    });
+  },
+
+  // Get user achievements
+  useGetAchievements: (id: string) => {
+    return useQuery({
+      queryKey: ['user', id, 'achievements'],
+      queryFn: () => api.users.getAchievements(id),
+      enabled: !!id,
+    });
+  },
+
   // Get leaderboard
   useGetLeaderboard: (limit?: number) => {
     return useQuery({
@@ -71,7 +90,7 @@ export const useUsers = {
           toast.success('User created successfully!');
         }
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast.error(error.message || 'Failed to create user');
       },
     });
@@ -91,7 +110,7 @@ export const useUsers = {
           toast.success('Profile updated successfully!');
         }
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast.error(error.message || 'Failed to update profile');
       },
     });
@@ -196,7 +215,7 @@ export const useRuns = {
           toast.success('Successfully joined the run!');
         }
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast.error(error.message || 'Failed to join run');
       },
     });
@@ -215,7 +234,7 @@ export const useRuns = {
           toast.success('Successfully left the run');
         }
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast.error(error.message || 'Failed to leave run');
       },
     });
@@ -227,7 +246,7 @@ export const useRuns = {
     
     return useMutation({
       mutationFn: ({ id, round, choice }: { id: string; round: number; choice: string }) => 
-        api.runs.vote(id, { choice: choice as any, round }),
+        api.runs.vote(id, { choice: choice as VoteChoice, round }),
       onSuccess: (response, variables) => {
         if (response.success) {
           queryClient.invalidateQueries({ queryKey: ['run', variables.id, 'voting-round'] });
@@ -235,7 +254,7 @@ export const useRuns = {
           toast.success('Vote cast successfully!');
         }
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast.error(error.message || 'Failed to cast vote');
       },
     });
@@ -243,6 +262,72 @@ export const useRuns = {
 };
 
 // Market data hooks
+// Item hooks
+export const useItems = {
+  // Get user's loadout
+  useGetUserLoadout: (userId: string) => {
+    return useQuery({
+      queryKey: ['items', 'loadout', userId],
+      queryFn: () => api.items.getUserLoadout(userId),
+      enabled: !!userId,
+    });
+  },
+
+  // Get available items for user
+  useGetAvailableItems: (userId: string) => {
+    return useQuery({
+      queryKey: ['items', 'available', userId],
+      queryFn: () => api.items.getAvailableItems(userId),
+      enabled: !!userId,
+    });
+  },
+
+  // Get active buffs for user
+  useGetActiveBuffs: (userId: string) => {
+    return useQuery({
+      queryKey: ['items', 'buffs', userId],
+      queryFn: () => api.items.getActiveBuffs(userId),
+      enabled: !!userId,
+    });
+  },
+
+  // Equip item mutation
+  useEquipItem: () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: ({ userId, itemId, slot }: { userId: string; itemId: string; slot?: number }) =>
+        api.items.equipItem(userId, itemId, slot),
+      onSuccess: (data, variables) => {
+        queryClient.invalidateQueries({ queryKey: ['items', 'loadout', variables.userId] });
+        queryClient.invalidateQueries({ queryKey: ['items', 'available', variables.userId] });
+        queryClient.invalidateQueries({ queryKey: ['items', 'buffs', variables.userId] });
+        toast.success('Item equipped successfully');
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || 'Failed to equip item');
+      },
+    });
+  },
+
+  // Unequip item mutation
+  useUnequipItem: () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+      mutationFn: ({ userId, itemId }: { userId: string; itemId: string }) =>
+        api.items.unequipItem(userId, itemId),
+      onSuccess: (data, variables) => {
+        queryClient.invalidateQueries({ queryKey: ['items', 'loadout', variables.userId] });
+        queryClient.invalidateQueries({ queryKey: ['items', 'available', variables.userId] });
+        queryClient.invalidateQueries({ queryKey: ['items', 'buffs', variables.userId] });
+        toast.success('Item unequipped successfully');
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || 'Failed to unequip item');
+      },
+    });
+  },
+};
+
 export const useMarket = {
   // Get price history
   useGetPriceHistory: (symbol: string, timeframe: string = '1h', options?: { enabled?: boolean }) => {
@@ -275,12 +360,11 @@ export const useHealthCheck = () => {
 };
 
 // Utility hook for WebSocket events
-export const useWebSocketEvent = (eventType: string, callback: (data: any) => void) => {
-  const { useEffect } = require('react');
-  
+export const useWebSocketEvent = <T = unknown>(eventType: string, callback: (data: T) => void) => {
   useEffect(() => {
-    const handleEvent = (event: CustomEvent) => {
-      callback(event.detail);
+    const handleEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<T>;
+      callback(customEvent.detail);
     };
 
     window.addEventListener(`ws:${eventType}`, handleEvent as EventListener);

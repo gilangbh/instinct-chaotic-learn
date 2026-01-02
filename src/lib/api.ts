@@ -1,5 +1,15 @@
 // API Service Layer for Instinct.fi
-import { User, Run, Badge, VoteChoice, CreateUserRequest, JoinRunRequest, CastVoteRequest } from './types';
+import { User, Run, Badge, VoteChoice, CreateUserRequest, JoinRunRequest, CastVoteRequest, ExtendedUserStats, Item, LoadoutItem, ItemWithLoadout, ActiveBuffs, Achievement, UserStats, UserLevelInfo, RunParticipant, Trade, VotingRound, PriceData } from './types';
+
+// SystemLog type definition
+interface SystemLog {
+  id: string;
+  runId?: string;
+  type: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+}
 
 const normalizeApiBaseUrl = (value?: string): string => {
   const fallback = 'http://localhost:3001/api/v1';
@@ -59,7 +69,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -82,18 +92,19 @@ class ApiClient {
       }
 
       return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('API request failed:', error);
-      
+
       // Enhance network errors with more context
       if (error instanceof TypeError && error.message.includes('fetch')) {
         const networkError = new Error(
           `NetworkError: Unable to connect to ${url}. Please check if the backend server is running.`
         );
-        networkError.cause = error;
+        // Store original error in a way compatible with older TypeScript versions
+        (networkError as Error & { cause?: unknown }).cause = error;
         throw networkError;
       }
-      
+
       throw error;
     }
   }
@@ -104,7 +115,7 @@ class ApiClient {
   }
 
   // POST request
-  async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
@@ -112,7 +123,7 @@ class ApiClient {
   }
 
   // PUT request
-  async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, data?: unknown): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
@@ -136,38 +147,49 @@ export const api = {
     getById: (id: string) => apiClient.get<User>(`/users/${id}`),
     getByWallet: (walletAddress: string) => apiClient.get<User>(`/users/wallet/${walletAddress}`),
     update: (id: string, data: Partial<User>) => apiClient.put<User>(`/users/${id}`, data),
-    getDetails: (id: string) => apiClient.get<User & { badges: Badge[]; xpHistory: any[] }>(`/users/${id}/details`),
-    getStats: (id: string) => apiClient.get<any>(`/users/${id}/stats`),
-    getLevel: (id: string) => apiClient.get<any>(`/users/${id}/level`),
+    getDetails: (id: string) => apiClient.get<User & { badges: Badge[]; xpHistory: Array<{ id: string; amount: number; reason: string; createdAt: Date }> }>(`/users/${id}/details`),
+    getStats: (id: string) => apiClient.get<UserStats>(`/users/${id}/stats`),
+    getLevel: (id: string) => apiClient.get<UserLevelInfo>(`/users/${id}/level`),
+    getExtendedStats: (id: string) => apiClient.get<ExtendedUserStats>(`/users/${id}/extended-stats`),
+    getAchievements: (id: string) => apiClient.get<Achievement[]>(`/users/${id}/achievements`),
     getLeaderboard: (limit?: number) => apiClient.get<User[]>(`/users/leaderboard${limit ? `?limit=${limit}` : ''}`),
   },
 
   // Run endpoints
+  items: {
+    getUserLoadout: (userId: string) => apiClient.get<LoadoutItem[]>(`/items/user/${userId}/loadout`),
+    getAvailableItems: (userId: string) => apiClient.get<ItemWithLoadout[]>(`/items/user/${userId}/available`),
+    getActiveBuffs: (userId: string) => apiClient.get<ActiveBuffs>(`/items/user/${userId}/buffs`),
+    equipItem: (userId: string, itemId: string, slot?: number) =>
+      apiClient.post<LoadoutItem>(`/items/user/${userId}/equip`, { itemId, slot }),
+    unequipItem: (userId: string, itemId: string) =>
+      apiClient.post<void>(`/items/user/${userId}/unequip`, { itemId }),
+  },
   runs: {
     getActive: () => apiClient.get<Run[]>('/runs/active'),
     getHistory: (page = 1, limit = 20) => apiClient.get<PaginatedResponse<Run>>(`/runs/history?page=${page}&limit=${limit}`),
     getById: (id: string) => apiClient.get<Run>(`/runs/${id}`),
-    create: (data: any) => apiClient.post<Run>('/runs', data),
-    join: (id: string, data: JoinRunRequest) => apiClient.post<any>(`/runs/${id}/join`, data),
+    create: (data: Partial<Run>) => apiClient.post<Run>('/runs', data),
+    join: (id: string, data: JoinRunRequest) => apiClient.post<{ success: boolean; message?: string }>(`/runs/${id}/join`, data),
     leave: (id: string) => apiClient.delete(`/runs/${id}/leave`),
-    withdraw: (id: string, data: { userWalletAddress?: string; walletSignature?: string }) => 
-      apiClient.post<any>(`/runs/${id}/withdraw`, data),
-    vote: (id: string, data: CastVoteRequest & { round: number }) => apiClient.post(`/runs/${id}/vote`, data),
-    getParticipants: (id: string) => apiClient.get<any[]>(`/runs/${id}/participants`),
-    getTrades: (id: string) => apiClient.get<any[]>(`/runs/${id}/trades`),
+    withdraw: (id: string, data: { userWalletAddress?: string; walletSignature?: string }) =>
+      apiClient.post<{ success: boolean; message?: string }>(`/runs/${id}/withdraw`, data),
+    vote: (id: string, data: CastVoteRequest & { round: number }) => apiClient.post<{ success: boolean; message?: string }>(`/runs/${id}/vote`, data),
+    getParticipants: (id: string) => apiClient.get<RunParticipant[]>(`/runs/${id}/participants`),
+    getTrades: (id: string) => apiClient.get<Trade[]>(`/runs/${id}/trades`),
     getUnrealizedPnL: (id: string, round: number) => apiClient.get<{ unrealizedPnL: number | null }>(`/runs/${id}/trades/${round}/unrealized-pnl`),
-    getCurrentVotingRound: (id: string) => apiClient.get<any>(`/runs/${id}/voting-round`),
-    getSystemLogs: (id: string, limit: number = 50) => apiClient.get<any[]>(`/runs/${id}/logs?limit=${limit}`),
-    mintTestUsdc: (walletAddress: string, amount: number = 1000) => 
+    getCurrentVotingRound: (id: string) => apiClient.get<VotingRound>(`/runs/${id}/voting-round`),
+    getSystemLogs: (id: string, limit: number = 50) => apiClient.get<SystemLog[]>(`/runs/${id}/logs?limit=${limit}`),
+    mintTestUsdc: (walletAddress: string, amount: number = 1000) =>
       apiClient.post<{ signature: string; amount: number; walletAddress: string }>('/runs/mint-test-usdc', { walletAddress, amount }),
   },
 
   // Market data endpoints
   market: {
-    getPriceHistory: (symbol: string, timeframe: string = '1h') => 
-      apiClient.get<any>(`/market/price-history/${symbol}?timeframe=${timeframe}`),
-    getCurrentPrice: (symbol: string) => 
-      apiClient.get<any>(`/market/price/${symbol}`),
+    getPriceHistory: (symbol: string, timeframe: string = '1h') =>
+      apiClient.get<PriceData[]>(`/market/price-history/${symbol}?timeframe=${timeframe}`),
+    getCurrentPrice: (symbol: string) =>
+      apiClient.get<PriceData>(`/market/price/${symbol}`),
   },
 
   // Wallet authentication endpoints
@@ -181,7 +203,7 @@ export const api = {
   },
 
   // Health check
-  health: () => apiClient.get<any>('/health'),
+  health: () => apiClient.get<{ status: string; timestamp: string }>('/health'),
 };
 
 // WebSocket connection
@@ -198,7 +220,7 @@ export class WebSocketService {
     this.ws.onopen = () => {
       console.log('WebSocket connected');
       this.reconnectAttempts = 0;
-      
+
       // Authenticate if user ID provided
       if (userId) {
         this.send({
@@ -237,13 +259,13 @@ export class WebSocketService {
     }
   }
 
-  private handleMessage(message: any) {
+  private handleMessage(message: { type: string; data?: unknown }) {
     // Emit custom events for different message types
     const event = new CustomEvent(`ws:${message.type}`, { detail: message.data });
     window.dispatchEvent(event);
   }
 
-  send(data: any) {
+  send(data: { type: string; data?: unknown }) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
